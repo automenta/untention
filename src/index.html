@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostr Chat</title>
+    <link rel="manifest" href="data:application/manifest+json,{}">
+    <style>
+        :root {
+            --bg: #1a1d21; --sidebar-bg: #25292e; --header-bg: #1e2227; --border: #343a40;
+            --text: #e9ecef; --text-secondary: #adb5bd; --primary: #4dabf7; --primary-hover: #339af0;
+            --danger: #fa5252; --danger-hover: #e03131; --success: #20c997; --unread-badge: #fa5252;
+            --input-bg: #2d333b; --message-bg: #2d333b; --self-message: #36404a;
+            --system-message: #343a40; --hover-bg: #343a40; --active-bg: #3d444d;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
+        body { background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+        #app { display: flex; width: 100%; height: 100%; }
+        #sidebar {
+            width: 280px; background: var(--sidebar-bg); display: flex; flex-direction: column;
+            border-right: 1px solid var(--border);
+            & #identity {
+                padding: 16px; background: var(--header-bg); border-bottom: 1px solid var(--border);
+                .user-info { display: flex; align-items: center; gap: 12px; }
+                .user-details { flex: 1; min-width: 0; }
+                .user-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .pubkey { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .action-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+            }
+            & #channels {
+                overflow-y: auto; flex: 1; padding: 8px 0;
+                .channel {
+                    padding: 12px 16px; display: flex; align-items: center; cursor: pointer;
+                    transition: background 0.2s; border-radius: 4px; margin: 4px 8px;
+                    &:hover { background: var(--hover-bg); }
+                    &.active { background: var(--active-bg); }
+                    .channel-icon { margin-right: 12px; font-size: 18px; }
+                    .channel-details { flex: 1; min-width: 0; }
+                    .channel-name {
+                        display: flex; align-items: center; gap: 6px; font-weight: 500;
+                        span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                    }
+                    .channel-unread { background: var(--unread-badge); color: white; font-size: 11px; padding: 2px 6px; border-radius: 10px; font-weight: bold; }
+                    .channel-meta { font-size: 12px; color: var(--text-secondary); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                }
+            }
+        }
+        #main {
+            flex: 1; display: flex; flex-direction: column;
+            & #chat-header {
+                padding: 16px; background: var(--header-bg); border-bottom: 1px solid var(--border);
+                display: flex; align-items: center; justify-content: space-between;
+                .channel-name { font-size: 18px; font-weight: 600; }
+                #chat-header-actions { display: flex; gap: 8px; }
+            }
+            & #chat-messages {
+                flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+                .message {
+                    display: flex; gap: 10px; max-width: 85%; align-self: flex-start;
+                    &.self { align-self: flex-end; flex-direction: row-reverse; }
+                    &.self .message-content { background: var(--self-message); border-bottom-right-radius: 2px; }
+                    &.system { align-self: center; max-width: 100%; }
+                    &.system .message-content { background: var(--system-message); color: var(--text-secondary); font-size: 13px; padding: 8px 12px; }
+                    &:not(.self):not(.system) .message-content { border-bottom-left-radius: 2px; }
+                    .message-avatar .avatar { width: 36px; height: 36px; font-size: 16px; }
+                    .message-content { background: var(--message-bg); padding: 10px 14px; border-radius: 12px; }
+                    .message-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+                    .message-sender { font-weight: 600; font-size: 14px; color: var(--primary); }
+                    &.self .message-sender { color: var(--primary-hover); }
+                    .message-time { font-size: 11px; color: var(--text-secondary); }
+                    .message-text { line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
+                }
+            }
+            & #chat-input {
+                padding: 16px; background: var(--header-bg); border-top: 1px solid var(--border);
+                & #message-form { display: flex; gap: 8px; }
+                & #message-input {
+                    flex: 1; background: var(--input-bg); border: 1px solid var(--border);
+                    border-radius: 20px; padding: 12px 16px; color: var(--text); resize: none;
+                    height: 44px; outline: none; font-size: 14px;
+                    &:focus { border-color: var(--primary); }
+                }
+            }
+        }
+        .avatar {
+            width: 40px; height: 40px; border-radius: 50%; background: var(--primary);
+            display: flex; align-items: center; justify-content: center; font-weight: bold; object-fit: cover;
+        }
+        button {
+            background: var(--primary); color: white; border: none; padding: 8px 12px;
+            border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s; font-size: 13px;
+            &:hover:not(:disabled) { background: var(--primary-hover); }
+            &:disabled { background: var(--border); cursor: not-allowed; }
+            &.secondary { background: var(--input-bg); border: 1px solid var(--border); }
+            &.secondary:hover:not(:disabled) { background: var(--hover-bg); }
+            &.danger { background-color: var(--danger); }
+            &.danger:hover:not(:disabled) { background-color: var(--danger-hover); }
+        }
+        .toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); color: white;
+            padding: 12px 24px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000; transition: opacity 0.3s;
+        }
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5);
+            display: flex; align-items: center; justify-content: center; z-index: 2000;
+            .modal-content {
+                background: var(--sidebar-bg); padding: 24px; border-radius: 8px; width: 90%; max-width: 400px;
+                h3 { margin-bottom: 16px; }
+                label { display: block; margin-bottom: 6px; font-size: 14px; }
+                input:not([type=checkbox]) {
+                    width: 100%; background: var(--input-bg); border: 1px solid var(--border);
+                    border-radius: 4px; padding: 10px; color: var(--text); margin-bottom: 16px;
+                }
+                .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+            }
+        }
+        .hidden { display: none !important; }
+        #loading-indicator {
+            position: fixed; top: 10px; right: 10px; background: var(--primary); color: white;
+            padding: 5px 10px; border-radius: 4px; font-size: 12px; z-index: 3000; display: none;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div id="sidebar">
+        <div id="identity">
+            <div class="user-info">
+                <img class="avatar" id="user-avatar" alt="User Avatar">
+                <div class="user-details">
+                    <div id="user-name" class="user-name"></div>
+                    <div class="pubkey" id="user-pubkey"></div>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button id="identity-action" data-action="manage-identity">Load/Create</button>
+                <button data-action="show-modal" data-modal="profile" class="secondary" disabled>Profile</button>
+                <button data-action="show-modal" data-modal="createGroup" class="secondary" disabled>New Group</button>
+                <button data-action="show-modal" data-modal="joinGroup" class="secondary" disabled>Join Group</button>
+                <button data-action="show-modal" data-modal="createDm" class="secondary" disabled>New DM</button>
+                <button data-action="show-modal" data-modal="relays" class="secondary">Relays</button>
+            </div>
+        </div>
+        <div id="channels"></div>
+    </div>
+    <div id="main">
+        <div id="chat-header">
+            <div class="channel-name">Select a channel</div>
+            <div id="chat-header-actions"></div>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="chat-input" class="hidden">
+            <form id="message-form">
+                <textarea id="message-input" placeholder="Type your message..." autocomplete="off"></textarea>
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+</div>
+<div id="loading-indicator">Loading...</div>
+
+<template id="modal-template">
+    <div class="modal hidden">
+        <div class="modal-content">
+            <h3 data-id="title"></h3>
+            <div data-id="body"></div>
+            <div class="modal-buttons" data-id="buttons"></div>
+        </div>
+    </div>
+</template>
+
+<script src="https://unpkg.com/nostr-tools@latest/lib/nostr.bundle.js"></script>
+<script src="https://unpkg.com/localforage@latest/dist/localforage.min.js"></script>
+<script>
+    const {generateSecretKey, getPublicKey, finalizeEvent, nip19, nip04, SimplePool} = NostrTools;
+
+    const Utils = {
+        now: () => Math.floor(Date.now() / 1000),
+        uint8ArrayToHex: arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join(''),
+        hexToUint8Array: hex => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))),
+        uint8ArrayToBase64: arr => btoa(String.fromCharCode(...arr)),
+        base64ToUint8Array: str => new Uint8Array(atob(str).split("").map(c => c.charCodeAt(0))),
+        shortenPubkey: pk => pk ? `${pk.substring(0, 8)}...${pk.substring(pk.length - 4)}` : 'unknown',
+        formatTime: ts => new Date(ts).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
+        escapeHtml: unsafe => unsafe?.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "\"").replace(/'/g, "'") ?? '',
+        findTag: (event, key) => event.tags.find(t => t[0] === key)?.[1],
+        getUserColor: pubkey => {
+            const colors = ['#4dabf7', '#20c997', '#f06595', '#cc5de8', '#5c7cfa', '#fcc419', '#ff8787', '#74b816'];
+            if (!pubkey) return colors[0];
+            return colors[Array.from(pubkey).reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length];
+        },
+        createAvatarSvg(text, seed) {
+            const initial = (text?.charAt(0) || '?').toUpperCase();
+            const color = this.getUserColor(seed);
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${this.escapeHtml(color)}"/><text x="50%" y="50%" font-size="50" dominant-baseline="central" text-anchor="middle" fill="white" font-family="system-ui, sans-serif">${this.escapeHtml(initial)}</text></svg>`;
+            return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+        },
+        crypto: {
+            aesEncrypt: async (text, base64Key) => {
+                const key = await Utils.crypto.importKeyFromBase64(base64Key);
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv}, key, new TextEncoder().encode(text));
+                return `${Utils.uint8ArrayToBase64(iv)}:${Utils.uint8ArrayToBase64(new Uint8Array(encrypted))}`;
+            },
+            aesDecrypt: async (data, base64Key) => {
+                const key = await Utils.crypto.importKeyFromBase64(base64Key);
+                const [ivBase64, encryptedBase64] = data.split(':');
+                if (!ivBase64 || !encryptedBase64) throw new Error('Invalid encrypted data');
+                const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: Utils.base64ToUint8Array(ivBase64)}, key, Utils.base64ToUint8Array(encryptedBase64));
+                return new TextDecoder().decode(decrypted);
+            },
+            exportKeyAsBase64: async key => Utils.uint8ArrayToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", key))),
+            importKeyFromBase64: base64Key => crypto.subtle.importKey("raw", Utils.base64ToUint8Array(base64Key), {name: "AES-GCM"}, true, ["encrypt", "decrypt"]),
+        }
+    };
+
+    class StateManager {
+        constructor() {
+            this.state = {
+                identity: {sk: null, pubKey: null, profile: null},
+                relays: ['wss://relay.damus.io', 'wss://relay.nostr.band', 'wss://nos.lol', 'wss://relay.snort.social'],
+                channels: {}, messages: {}, profiles: {}, currentChannelId: null,
+                fetchingProfiles: new Set(), messageLimit: 100,
+            };
+        }
+        async load() {
+            const [identity, channels, profiles, currentChannelId, relays] = await Promise.all([
+                localforage.getItem('identity_v2'), localforage.getItem('channels_v2'),
+                localforage.getItem('profiles_v2'), localforage.getItem('currentChannelId_v2'),
+                localforage.getItem('relays_v2')
+            ]);
+            if (identity?.privKeyHex) {
+                try {
+                    this.state.identity.sk = Utils.hexToUint8Array(identity.privKeyHex);
+                    this.state.identity.pubKey = getPublicKey(this.state.identity.sk);
+                } catch (e) { console.error("Failed to load identity:", e); }
+            }
+            this.state.channels = channels ?? {};
+            this.state.profiles = profiles ?? {};
+            this.state.currentChannelId = currentChannelId ?? 'public';
+            this.state.relays = relays ?? this.state.relays;
+            if (this.state.identity.pubKey && this.state.profiles[this.state.identity.pubKey]) {
+                this.state.identity.profile = this.state.profiles[this.state.identity.pubKey];
+            }
+            if (!this.state.channels.public) {
+                this.state.channels.public = {id: 'public', name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0};
+            }
+            Object.values(this.state.channels).forEach(ch => ch.lastEventTimestamp ??= 0);
+        }
+        async saveIdentity(skHex) { await localforage.setItem('identity_v2', {privKeyHex: skHex}); }
+        async clearIdentity() {
+            const keys = await localforage.keys();
+            const messageKeys = keys.filter(key => key.startsWith('messages_'));
+            await Promise.all([
+                localforage.removeItem('identity_v2'),
+                localforage.removeItem('channels_v2'),
+                localforage.removeItem('profiles_v2'),
+                localforage.removeItem('currentChannelId_v2'),
+                ...messageKeys.map(key => localforage.removeItem(key))
+            ]);
+            this.state.channels = {};
+            this.state.messages = {};
+            this.state.profiles = {};
+            this.state.currentChannelId = null;
+            this.state.channels.public = {id: 'public', name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0};
+        }
+        saveChannels() { return localforage.setItem('channels_v2', this.state.channels); }
+        saveProfiles() { return localforage.setItem('profiles_v2', this.state.profiles); }
+        saveCurrentChannelId() { return localforage.setItem('currentChannelId_v2', this.state.currentChannelId); }
+        async loadMessages(channelId) {
+            if (channelId) this.state.messages[channelId] = await localforage.getItem(`messages_${channelId}`) ?? [];
+        }
+        async saveMessages(channelId) {
+            if (channelId && this.state.messages[channelId]) return localforage.setItem(`messages_${channelId}`, this.state.messages[channelId]);
+        }
+        async deleteMessages(channelId) {
+            if (channelId) return localforage.removeItem(`messages_${channelId}`);
+        }
+        saveRelays() { return localforage.setItem('relays_v2', this.state.relays); }
+    }
+
+    class UIManager {
+        constructor(app) {
+            this.app = app;
+            this.ui = {};
+            this.modals = {};
+        }
+        bind() {
+            const ids = ['app', 'sidebar', 'identity', 'user-avatar', 'user-name', 'user-pubkey', 'identity-action', 'channels', 'main', 'chat-header', 'chat-header-actions', 'chat-messages', 'chat-input', 'message-form', 'message-input', 'loading-indicator'];
+            ids.forEach(id => this.ui[id.replace(/-./g, x => x[1].toUpperCase())] = document.getElementById(id));
+            this.ui.chatHeaderName = this.ui.chatHeader.querySelector('.channel-name');
+            this.ui.sidebarActionButtons = document.querySelectorAll('#sidebar .action-buttons button:not(#identity-action)');
+            this.createModals();
+        }
+        setupEventListeners() {
+            document.body.addEventListener('click', e => this.app.handleAction(e));
+            this.ui.channels.addEventListener('click', e => {
+                const channelEl = e.target.closest('.channel');
+                if (channelEl?.dataset.channelId) this.app.selectChannel(channelEl.dataset.channelId);
+            });
+            this.ui.messageForm.addEventListener('submit', e => {
+                e.preventDefault();
+                this.app.sendMessage();
+            });
+            this.ui.messageInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.app.sendMessage();
+                }
+            });
+        }
+        renderAll() {
+            this.renderIdentity();
+            this.renderChannels();
+            this.renderMessagesForCurrentChannel();
+            this.updateSidebarButtonsState();
+        }
+        renderIdentity() {
+            const {pubKey, profile} = this.app.state.identity;
+            if (pubKey) {
+                const displayName = profile?.name || Utils.shortenPubkey(pubKey);
+                this.ui.userName.textContent = displayName;
+                this.ui.userPubkey.textContent = nip19.npubEncode(pubKey);
+                this.ui.userAvatar.src = profile?.picture || Utils.createAvatarSvg(displayName, pubKey);
+                this.ui.userAvatar.onerror = () => this.ui.userAvatar.src = Utils.createAvatarSvg(displayName, pubKey);
+                this.ui.identityAction.textContent = 'Logout';
+            } else {
+                this.ui.userName.textContent = 'Anonymous';
+                this.ui.userPubkey.textContent = 'No identity loaded';
+                this.ui.userAvatar.src = Utils.createAvatarSvg('?', '#ccc');
+                this.ui.identityAction.textContent = 'Load/Create';
+            }
+        }
+        renderChannels() {
+            const sortedChannels = Object.values(this.app.state.channels).sort((a, b) => (b.lastEventTimestamp ?? 0) - (a.lastEventTimestamp ?? 0));
+            this.ui.channels.innerHTML = sortedChannels.map(ch => {
+                if (!ch?.id || ((ch.type === 'dm' || ch.type === 'group') && !this.app.state.identity.sk)) return '';
+                return this.createChannelHtml(ch);
+            }).join('');
+        }
+        async renderMessagesForCurrentChannel() {
+            this.ui.chatMessages.innerHTML = '';
+            const channelId = this.app.state.currentChannelId;
+            if (!channelId) {
+                this.ui.chatHeaderName.textContent = 'Select a channel';
+                this.ui.chatHeaderActions.innerHTML = '';
+                return;
+            }
+            await this.app.stateManager.loadMessages(channelId);
+            const messages = this.app.state.messages[channelId] ?? [];
+            if (messages.length === 0) {
+                const welcomeText = channelId === 'public' ? "Welcome! Subscribing to Nostr's global feed..." : "No messages yet.";
+                this.renderSystemMessage(welcomeText);
+            } else {
+                this.ui.chatMessages.innerHTML = messages.map(msg => this.createMessageHtml(msg)).join('');
+            }
+            this.scrollToBottom();
+        }
+        renderSystemMessage(text) {
+            this.ui.chatMessages.innerHTML += `<div class="message system"><div class="message-content"><div class="message-text">${Utils.escapeHtml(text)}</div></div></div>`;
+        }
+        createChannelHtml(channel) {
+            const {id, name, type, unread, pubkey} = channel;
+            const profile = this.app.state.profiles[pubkey];
+            const displayName = type === 'dm' && profile?.name ? profile.name : name;
+            const icons = {public: '🌐', dm: '👤', group: '👥'};
+            const metas = {public: `${this.app.state.relays.length} relays`, dm: 'Direct Message', group: 'Encrypted Group'};
+            return `<div class="channel ${id === this.app.state.currentChannelId ? 'active' : ''}" data-channel-id="${id}">
+                <div class="channel-icon">${icons[type] ?? '❓'}</div>
+                <div class="channel-details">
+                    <div class="channel-name"><span>${Utils.escapeHtml(displayName)}</span>${unread > 0 ? `<span class="channel-unread">${unread}</span>` : ''}</div>
+                    <div class="channel-meta">${Utils.escapeHtml(metas[type] ?? '')}</div>
+                </div>
+            </div>`;
+        }
+        createMessageHtml(msg) {
+            const isSelf = msg.pubkey === this.app.state.identity.pubKey;
+            const profile = this.app.state.profiles[msg.pubkey] ?? {name: Utils.shortenPubkey(msg.pubkey), pubkey: msg.pubkey};
+            const senderName = isSelf ? 'You' : profile.name;
+            const avatarSrc = profile.picture ?? Utils.createAvatarSvg(senderName, msg.pubkey);
+            return `<div class="message ${isSelf ? 'self' : ''}" data-message-id="${msg.id}" data-pubkey="${msg.pubkey}">
+                <div class="message-avatar"><img class="avatar" src="${avatarSrc}" alt="${senderName.charAt(0)}" onerror="this.src='${Utils.createAvatarSvg(senderName, msg.pubkey)}'"></div>
+                <div class="message-content">
+                    <div class="message-header"><div class="message-sender">${Utils.escapeHtml(senderName)}</div><div class="message-time">${Utils.formatTime(msg.created_at * 1000)}</div></div>
+                    <div class="message-text">${Utils.escapeHtml(msg.content)}</div>
+                </div>
+            </div>`;
+        }
+        updateMessagesForPubkey(pubkey, profile) {
+            document.querySelectorAll(`.message[data-pubkey="${pubkey}"]`).forEach(msgEl => {
+                const senderEl = msgEl.querySelector('.message-sender');
+                const avatarEl = msgEl.querySelector('.message-avatar .avatar');
+                if (senderEl && !msgEl.classList.contains('self')) senderEl.textContent = profile.name;
+                if (avatarEl) {
+                    avatarEl.src = profile.picture || Utils.createAvatarSvg(profile.name, pubkey);
+                    avatarEl.onerror = () => { avatarEl.src = Utils.createAvatarSvg(profile.name, pubkey); };
+                }
+            });
+        }
+        updateSidebarButtonsState() {
+            this.ui.sidebarActionButtons.forEach(btn => btn.disabled = !this.app.state.identity.sk);
+        }
+        updateChannelHeader() {
+            const channel = this.app.state.channels[this.app.state.currentChannelId];
+            if (!channel) return;
+            this.ui.chatHeaderName.textContent = channel.type === 'dm' ? (this.app.state.profiles[channel.pubkey]?.name ?? channel.name) : channel.name;
+            let actionsHtml = '';
+            if (channel.type === 'group') {
+                actionsHtml = `<button data-action="show-group-info" class="secondary">Info</button><button data-action="leave-channel" class="danger">Leave</button>`;
+            } else if (channel.type !== 'public') {
+                actionsHtml = `<button data-action="leave-channel" class="danger">Hide</button>`;
+            }
+            this.ui.chatHeaderActions.innerHTML = actionsHtml;
+        }
+        scrollToBottom() { this.ui.chatMessages.scrollTop = this.ui.chatMessages.scrollHeight; }
+        showLoading(isLoading) { this.ui.loadingIndicator.style.display = isLoading ? 'block' : 'none'; }
+        showToast(message, type = 'info') {
+            document.querySelector('.toast')?.remove();
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            toast.style.background = `var(--${{error: 'danger', success: 'success'}[type] ?? 'header-bg'})`;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        createModals() {
+            const modalDefs = {
+                identity: { title: 'Manage Identity', body: `<label for="privkey-input">Secret Key (nsec/hex) or blank for new:</label><input type="password" id="privkey-input">`, buttons: `<button data-action="close-modal" data-modal="identity">Cancel</button><button data-action="save-identity">Load/Gen</button>` },
+                profile: { title: 'Edit Profile', body: `<label for="profile-name-input">Name:</label><input type="text" id="profile-name-input"><label for="profile-picture-input">Picture URL:</label><input type="text" id="profile-picture-input"><label for="profile-nip05-input">NIP-05:</label><input type="text" id="profile-nip05-input">`, buttons: `<button data-action="close-modal" data-modal="profile">Cancel</button><button data-action="update-profile">Save</button>` },
+                createGroup: { title: 'Create Group', body: `<label for="group-name-input">Group Name:</label><input type="text" id="group-name-input">`, buttons: `<button data-action="close-modal" data-modal="createGroup">Cancel</button><button data-action="create-group">Create</button>` },
+                joinGroup: { title: 'Join Group', body: `<label for="join-group-id-input">Group ID:</label><input type="text" id="join-group-id-input"><label for="join-group-key-input">Secret Key (Base64):</label><input type="text" id="join-group-key-input"><label for="join-group-name-input">Group Name:</label><input type="text" id="join-group-name-input">`, buttons: `<button data-action="close-modal" data-modal="joinGroup">Cancel</button><button data-action="join-group">Join</button>` },
+                createDm: { title: 'New Direct Message', body: `<label for="dm-pubkey-input">Recipient's Public Key (npub/hex):</label><input type="text" id="dm-pubkey-input">`, buttons: `<button data-action="close-modal" data-modal="createDm">Cancel</button><button data-action="create-dm">Start</button>` },
+                groupInfo: { title: 'Group Info', body: `<p>Share these details to invite users:</p><label>Group ID:</label><input type="text" id="group-info-id" readonly><label>Secret Key (Base64):</label><input type="text" id="group-info-key" readonly>`, buttons: `<button data-action="close-modal" data-modal="groupInfo">Close</button>` },
+                relays: { title: 'Manage Relays', body: `<label for="relay-url-input">Relay URL (wss://):</label><input type="text" id="relay-url-input" placeholder="wss://your.relay.com"><button data-action="add-relay" style="margin-top: 8px; margin-bottom: 16px;">Add Relay</button><h4>Current Relays:</h4><ul id="current-relays-list" style="list-style: none; padding: 0; max-height: 150px; overflow-y: auto;"></ul>`, buttons: `<button data-action="close-modal" data-modal="relays">Close</button>` }
+            };
+            const template = document.getElementById('modal-template');
+            for (const name in modalDefs) {
+                const clone = template.content.cloneNode(true);
+                const modalEl = clone.querySelector('.modal');
+                modalEl.id = `${name}-modal`;
+                modalEl.querySelector('[data-id="title"]').textContent = modalDefs[name].title;
+                modalEl.querySelector('[data-id="body"]').innerHTML = modalDefs[name].body;
+                modalEl.querySelector('[data-id="buttons"]').innerHTML = modalDefs[name].buttons;
+                document.body.appendChild(clone);
+                this.modals[name] = { el: document.getElementById(`${name}-modal`) };
+                modalEl.querySelectorAll('input').forEach(input => this.modals[name][`${input.id.replace(/-/g, '_')}`] = input);
+            }
+        }
+        toggleModal(name, show) { this.modals[name]?.el.classList.toggle('hidden', !show); }
+        renderRelayModal() {
+            const listEl = this.modals.relays.el.querySelector('#current-relays-list');
+            if (!listEl) return;
+            listEl.innerHTML = this.app.state.relays.map(relayUrl => `
+                <li style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border);">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${Utils.escapeHtml(relayUrl)}</span>
+                    <button data-action="remove-relay" data-relay-url="${Utils.escapeHtml(relayUrl)}" class="danger" style="padding: 4px 8px; font-size: 12px;">Remove</button>
+                </li>
+            `).join('');
+        }
+    }
+
+    class NostrService {
+        constructor(app) {
+            this.app = app;
+            this.pool = null;
+            this.subs = new Map();
+        }
+        connect() {
+            this.disconnect();
+            this.pool = new SimplePool({eoseSubTimeout: 6000});
+            this.subscribeToCoreEvents();
+        }
+        disconnect() {
+            if (!this.pool) return;
+            this.subs.forEach(sub => sub.unsub());
+            this.subs.clear();
+            this.pool.close(this.app.state.relays);
+            this.pool = null;
+        }
+        async updateRelays(newRelaysList) {
+            this.app.state.relays = [...new Set(newRelaysList)].filter(url => url.startsWith('wss://'));
+            await this.app.stateManager.saveRelays();
+            this.disconnect();
+            this.connect();
+            this.app.uiManager.renderChannels();
+            this.app.uiManager.showToast('Relay list updated. Reconnecting...', 'info');
+        }
+        subscribe(id, filters) {
+            this.subs.get(id)?.unsub();
+            if (!this.pool) return;
+
+            const eventBuffer = [];
+            let eoseReceived = false;
+
+            const sub = this.pool.subscribe(this.app.state.relays, filters, {
+                onevent: event => {
+                    if (eoseReceived) {
+                        this.app.handleIncomingEvent(event, id);
+                    } else {
+                        eventBuffer.push(event);
+                    }
+                },
+                oneose: () => {
+                    eoseReceived = true;
+                    for (const event of eventBuffer) {
+                        this.app.handleIncomingEvent(event, id);
+                    }
+                    eventBuffer.length = 0; // Clear buffer
+                }
+            });
+            this.subs.set(id, sub);
+        }
+        async publish(eventTemplate) {
+            if (!this.app.state.identity.sk) throw new Error('Not logged in.');
+            const event = finalizeEvent({...eventTemplate, tags: eventTemplate.tags ?? [], created_at: Utils.now()}, this.app.state.identity.sk);
+            try {
+                await Promise.any(this.pool.publish(this.app.state.relays, event));
+                return event;
+            } catch (e) {
+                this.app.uiManager.showToast('Failed to publish event.', 'error');
+                throw e;
+            }
+        }
+        subscribeToCoreEvents() {
+            if (!this.pool) return;
+            this.subscribe('public', [{kinds: [1], limit: 50}]);
+            if (this.app.state.identity.pubKey) {
+                const {pubKey} = this.app.state.identity;
+                const {messageLimit} = this.app.state;
+                this.subscribe('dms', [{kinds: [4], '#p': [pubKey], limit: messageLimit}]);
+                this.subscribe('profile', [{kinds: [0], authors: [pubKey], limit: 1}]);
+                this.resubscribeToGroups();
+            }
+        }
+        resubscribeToGroups() {
+            const groupIds = Object.values(this.app.state.channels).filter(c => c.type === 'group').map(c => c.id);
+            if (groupIds.length > 0 && this.pool) {
+                this.subscribe('groups', [{kinds: [1], '#g': groupIds, limit: this.app.state.messageLimit * groupIds.length}]);
+            } else {
+                this.subs.get('groups')?.unsub();
+            }
+        }
+        async fetchProfile(pubkey) {
+            const {profiles, fetchingProfiles, relays} = this.app.state;
+            if (!pubkey || profiles[pubkey]?.lastUpdatedAt || fetchingProfiles.has(pubkey) || !this.pool) return;
+            fetchingProfiles.add(pubkey);
+            try {
+                const event = await this.pool.get(relays, {kinds: [0], authors: [pubkey], limit: 1});
+                if (event) await this.app.processKind0(event);
+            } catch (e) {
+                console.warn(`Error fetching profile for ${pubkey}:`, e);
+            } finally {
+                fetchingProfiles.delete(pubkey);
+            }
+        }
+    }
+
+    class NostrChatApp {
+        constructor() {
+            this.stateManager = new StateManager();
+            this.uiManager = new UIManager(this);
+            this.nostrService = new NostrService(this);
+            this.init();
+        }
+        get state() { return this.stateManager.state; }
+
+        async init() {
+            this.uiManager.bind();
+            this.uiManager.setupEventListeners();
+            this.uiManager.showLoading(true);
+            await this.stateManager.load();
+            this.uiManager.renderAll();
+            this.selectChannel(this.state.currentChannelId);
+            this.nostrService.connect();
+            if (this.state.identity.sk) {
+                await this.nostrService.fetchProfile(this.state.identity.pubKey);
+            }
+            this.uiManager.showLoading(false);
+        }
+
+        async handleAction(e) {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            e.preventDefault();
+            const {action, modal, relayUrl} = target.dataset;
+            const actions = {
+                'manage-identity': () => this.state.identity.sk ? this.logout() : this.uiManager.toggleModal('identity', true),
+                'show-modal': () => this.showModal(modal),
+                'close-modal': () => this.uiManager.toggleModal(modal, false),
+                'save-identity': async () => {
+                    const skInput = this.uiManager.modals.identity.privkey_input.value.trim();
+                    await (skInput ? this.saveIdentity(skInput) : this.createNewIdentity());
+                },
+                'update-profile': () => this.updateProfile(),
+                'create-group': async () => {
+                    await this.createEncryptedGroupChannel(this.uiManager.modals.createGroup.group_name_input.value.trim());
+                    this.uiManager.modals.createGroup.group_name_input.value = '';
+                },
+                'join-group': async () => {
+                    const {join_group_id_input: id, join_group_key_input: key, join_group_name_input: name} = this.uiManager.modals.joinGroup;
+                    if (id.value && key.value && name.value) {
+                        await this.joinEncryptedGroupChannel(id.value.trim(), key.value.trim(), name.value.trim());
+                        [id, key, name].forEach(i => i.value = '');
+                    } else this.uiManager.showToast('All fields are required.', 'error');
+                },
+                'create-dm': async () => {
+                    const pubkey = this.uiManager.modals.createDm.dm_pubkey_input.value.trim();
+                    if (pubkey) await this.createDmChannel(pubkey);
+                    else this.uiManager.showToast('Recipient public key is required.', 'error');
+                },
+                'leave-channel': () => this.leaveChannel(this.state.currentChannelId),
+                'show-group-info': () => {
+                    const channel = this.state.channels[this.state.currentChannelId];
+                    this.showGroupInfoModal(channel.id, channel.secretKey, channel.name);
+                },
+                'add-relay': async () => {
+                    const urlInput = this.uiManager.modals.relays.relay_url_input;
+                    const newRelayUrl = urlInput.value.trim();
+                    if (!newRelayUrl.startsWith('wss://')) return this.uiManager.showToast('Invalid relay URL. Must start with wss://', 'error');
+                    if (this.state.relays.includes(newRelayUrl)) return this.uiManager.showToast('Relay already in list.', 'info');
+                    await this.nostrService.updateRelays([...this.state.relays, newRelayUrl]);
+                    this.uiManager.renderRelayModal();
+                    urlInput.value = '';
+                },
+                'remove-relay': async () => {
+                    if (!relayUrl) return;
+                    const updatedRelays = this.state.relays.filter(url => url !== relayUrl);
+                    if (updatedRelays.length === 0) return this.uiManager.showToast('Cannot remove all relays. Add another one first.', 'error');
+                    await this.nostrService.updateRelays(updatedRelays);
+                    this.uiManager.renderRelayModal();
+                }
+            };
+            if (actions[action]) await actions[action]();
+        }
+
+        async saveIdentity(skInput) {
+            this.uiManager.showLoading(true);
+            this.uiManager.toggleModal('identity', false);
+            try {
+                let skHex;
+                if (skInput.startsWith('nsec')) skHex = nip19.decode(skInput).data;
+                else if (/^[0-9a-fA-F]{64}$/.test(skInput)) skHex = skInput;
+                else throw new Error('Invalid secret key format.');
+
+                this.state.identity = {sk: null, pubKey: null, profile: null};
+                await this.stateManager.clearIdentity();
+                await this.stateManager.saveIdentity(skHex);
+                await this.stateManager.load();
+
+                this.nostrService.connect();
+                await this.nostrService.fetchProfile(this.state.identity.pubKey);
+
+                this.uiManager.renderAll();
+                this.uiManager.updateSidebarButtonsState();
+                this.selectChannel(this.state.currentChannelId);
+                this.uiManager.showToast('Identity loaded!', 'success');
+            } catch (e) {
+                this.uiManager.showToast(`Error: ${e.message}`, 'error');
+                this.state.identity = {sk: null, pubKey: null, profile: null};
+                this.uiManager.renderIdentity();
+                this.uiManager.updateSidebarButtonsState();
+            } finally {
+                this.uiManager.showLoading(false);
+            }
+        }
+
+        async createNewIdentity() {
+            await this.saveIdentity(Utils.uint8ArrayToHex(generateSecretKey()));
+            this.uiManager.showToast('New identity created and loaded!', 'success');
+        }
+
+        async logout() {
+            if (!confirm('Are you sure you want to logout? This will delete all local data.')) return;
+            this.state.identity = {sk: null, pubKey: null, profile: null};
+            await this.stateManager.clearIdentity();
+            this.nostrService.connect();
+            this.uiManager.renderIdentity();
+            this.uiManager.renderChannels();
+            this.uiManager.updateSidebarButtonsState();
+            this.selectChannel('public');
+            this.uiManager.showToast('Logged out.', 'info');
+        }
+
+        showModal(modalName) {
+            if (modalName === 'profile') {
+                const {profile} = this.state.identity;
+                const {profile_name_input, profile_picture_input, profile_nip05_input} = this.uiManager.modals.profile;
+                profile_name_input.value = profile?.name ?? '';
+                profile_picture_input.value = profile?.picture ?? '';
+                profile_nip05_input.value = profile?.nip05 ?? '';
+            }
+            if (modalName === 'relays') this.uiManager.renderRelayModal();
+            this.uiManager.toggleModal(modalName, true);
+        }
+
+        async updateProfile() {
+            this.uiManager.showLoading(true);
+            this.uiManager.toggleModal('profile', false);
+            try {
+                const {profile_name_input, profile_picture_input, profile_nip05_input} = this.uiManager.modals.profile;
+                const existing = await this.nostrService.pool.get(this.state.relays, {kinds: [0], authors: [this.state.identity.pubKey], limit: 1});
+                const newContent = {
+                    ...(existing ? JSON.parse(existing.content) : {}),
+                    name: profile_name_input.value.trim(),
+                    picture: profile_picture_input.value.trim(),
+                    nip05: profile_nip05_input.value.trim(),
+                };
+                const event = await this.nostrService.publish({kind: 0, content: JSON.stringify(newContent)});
+                await this.processKind0(event);
+                this.uiManager.showToast('Profile updated!', 'success');
+            } catch (e) {
+                this.uiManager.showToast(`Profile update failed: ${e.message}`, 'error');
+            } finally {
+                this.uiManager.showLoading(false);
+            }
+        }
+
+        async handleIncomingEvent(event, subId) {
+            if (event.kind === 0) return this.processKind0(event);
+            let channelId, decryptedContent = event.content;
+            try {
+                if (event.kind === 4) {
+                    const otherUser = event.pubkey === this.state.identity.pubKey ? Utils.findTag(event, 'p') : event.pubkey;
+                    if (!otherUser) return;
+                    channelId = otherUser;
+                    decryptedContent = await nip04.decrypt(Utils.uint8ArrayToHex(this.state.identity.sk), otherUser, event.content);
+                    if (!this.state.channels[channelId]) {
+                        this.state.channels[channelId] = {id: channelId, name: Utils.shortenPubkey(channelId), type: 'dm', pubkey: channelId, unread: 0, lastEventTimestamp: Utils.now()};
+                        await this.stateManager.saveChannels();
+                        this.uiManager.renderChannels();
+                        this.nostrService.fetchProfile(channelId);
+                    }
+                } else if (event.kind === 1) {
+                    const groupTag = Utils.findTag(event, 'g');
+                    if (groupTag) {
+                        channelId = groupTag;
+                        const group = this.state.channels[channelId];
+                        if (!group?.secretKey) return;
+                        decryptedContent = await Utils.crypto.aesDecrypt(event.content, group.secretKey);
+                    } else if (subId === 'public') {
+                        channelId = 'public';
+                    } else return;
+                } else return;
+            } catch (e) { return; }
+            if (!channelId) return;
+            await this.processAndRenderMessage({...event, content: decryptedContent}, channelId);
+        }
+
+        async processAndRenderMessage(message, channelId) {
+            const messages = this.state.messages[channelId] ?? [];
+            if (messages.some(m => m.id === message.id)) return;
+            messages.push(message);
+            messages.sort((a, b) => a.created_at - b.created_at);
+            this.state.messages[channelId] = messages.slice(-this.state.messageLimit);
+            await this.stateManager.saveMessages(channelId);
+            if (channelId === this.state.currentChannelId) {
+                this.uiManager.ui.chatMessages.querySelector('.message.system')?.remove();
+                this.uiManager.ui.chatMessages.insertAdjacentHTML('beforeend', this.uiManager.createMessageHtml(message));
+                this.uiManager.scrollToBottom();
+            } else if (message.pubkey !== this.state.identity.pubKey && this.state.channels[channelId]) {
+                this.state.channels[channelId].unread++;
+            }
+            if (this.state.channels[channelId]) {
+                this.state.channels[channelId].lastEventTimestamp = Math.max(this.state.channels[channelId].lastEventTimestamp, message.created_at);
+            }
+            this.uiManager.renderChannels();
+            this.nostrService.fetchProfile(message.pubkey);
+        }
+
+        async processKind0(event) {
+            try {
+                const profileData = JSON.parse(event.content);
+                const newProfile = {
+                    name: profileData.name || profileData.display_name || Utils.shortenPubkey(event.pubkey),
+                    picture: profileData.picture, nip05: profileData.nip05, pubkey: event.pubkey, lastUpdatedAt: event.created_at,
+                };
+                const existing = this.state.profiles[event.pubkey];
+                if (!existing || newProfile.lastUpdatedAt > (existing.lastUpdatedAt ?? 0)) {
+                    this.state.profiles[event.pubkey] = newProfile;
+                    await this.stateManager.saveProfiles();
+                    if (event.pubkey === this.state.identity.pubKey) {
+                        this.state.identity.profile = newProfile;
+                        this.uiManager.renderIdentity();
+                    }
+                    this.uiManager.renderChannels();
+                    this.uiManager.updateChannelHeader();
+                    this.uiManager.updateMessagesForPubkey(event.pubkey, newProfile);
+                }
+            } catch (e) { console.warn('Error parsing profile event:', e); }
+        }
+
+        selectChannel(channelId) {
+            this.state.currentChannelId = this.state.channels[channelId] ? channelId : 'public';
+            this.stateManager.saveCurrentChannelId();
+            const channel = this.state.channels[this.state.currentChannelId];
+            if (channel.unread > 0) {
+                channel.unread = 0;
+                this.stateManager.saveChannels();
+            }
+            this.uiManager.ui.chatInput.classList.toggle('hidden', !this.state.identity.sk || this.state.currentChannelId === 'public');
+            this.uiManager.updateChannelHeader();
+            this.uiManager.renderChannels();
+            this.uiManager.renderMessagesForCurrentChannel();
+        }
+
+        async leaveChannel(channelId) {
+            const channel = this.state.channels[channelId];
+            if (!channel || !confirm(`Leave/hide ${channel.type} "${channel.name}"?`)) return;
+            delete this.state.channels[channelId];
+            delete this.state.messages[channelId];
+            await Promise.all([this.stateManager.deleteMessages(channelId), this.stateManager.saveChannels()]);
+            if (channel.type === 'group') this.nostrService.resubscribeToGroups();
+            this.selectChannel('public');
+            this.uiManager.showToast(`Channel removed.`, 'info');
+        }
+
+        async createDmChannel(pubkeyInput) {
+            this.uiManager.toggleModal('createDm', false);
+            try {
+                let pk = pubkeyInput.startsWith('npub') ? nip19.decode(pubkeyInput).data : pubkeyInput;
+                if (!/^[0-9a-fA-F]{64}$/.test(pk)) throw new Error('Invalid public key.');
+                if (pk === this.state.identity.pubKey) throw new Error("Cannot DM yourself.");
+                if (!this.state.channels[pk]) {
+                    this.state.channels[pk] = {id: pk, name: Utils.shortenPubkey(pk), type: 'dm', pubkey: pk, unread: 0, lastEventTimestamp: Utils.now()};
+                    await this.stateManager.saveChannels();
+                    await this.nostrService.fetchProfile(pk);
+                }
+                this.selectChannel(pk);
+                this.uiManager.showToast(`DM started.`, 'success');
+            } catch (e) { this.uiManager.showToast(`Error: ${e.message}`, 'error'); }
+        }
+
+        async createEncryptedGroupChannel(name) {
+            this.uiManager.toggleModal('createGroup', false);
+            if (!name) return this.uiManager.showToast('Group name is required.', 'error');
+            const groupId = crypto.randomUUID();
+            const secretKey = await Utils.crypto.exportKeyAsBase64(await crypto.subtle.generateKey({name: "AES-GCM", length: 256}, true, ["encrypt", "decrypt"]));
+            this.state.channels[groupId] = {id: groupId, name, type: 'group', secretKey, unread: 0, lastEventTimestamp: Utils.now()};
+            await this.stateManager.saveChannels();
+            this.nostrService.resubscribeToGroups();
+            this.selectChannel(groupId);
+            this.uiManager.showToast(`Group "${name}" created.`, 'success');
+            this.showGroupInfoModal(groupId, secretKey, name);
+        }
+
+        async joinEncryptedGroupChannel(id, secretKey, name) {
+            this.uiManager.toggleModal('joinGroup', false);
+            if (this.state.channels[id]) return this.uiManager.showToast(`Already in group.`, 'warn');
+            try { atob(secretKey); } catch (e) { return this.uiManager.showToast('Invalid secret key.', 'error'); }
+            this.state.channels[id] = {id, name, type: 'group', secretKey, unread: 0, lastEventTimestamp: Utils.now()};
+            await this.stateManager.saveChannels();
+            this.nostrService.resubscribeToGroups();
+            this.selectChannel(id);
+            this.uiManager.showToast(`Joined group "${name}".`, 'success');
+        }
+
+        showGroupInfoModal(groupId, secretKey, groupName) {
+            const {group_info_id, group_info_key} = this.uiManager.modals.groupInfo;
+            this.uiManager.modals.groupInfo.el.querySelector('h3').textContent = `Info for "${groupName}"`;
+            group_info_id.value = groupId;
+            group_info_key.value = secretKey;
+            this.uiManager.toggleModal('groupInfo', true);
+        }
+
+        async sendMessage() {
+            const content = this.uiManager.ui.messageInput.value.trim();
+            const channel = this.state.channels[this.state.currentChannelId];
+            if (!content || !channel || channel.type === 'public') return;
+            this.uiManager.showLoading(true);
+            try {
+                let eventTemplate = {kind: 1, content};
+                if (channel.type === 'dm') {
+                    eventTemplate.kind = 4;
+                    eventTemplate.tags = [['p', channel.pubkey]];
+                    eventTemplate.content = await nip04.encrypt(Utils.uint8ArrayToHex(this.state.identity.sk), channel.pubkey, content);
+                } else if (channel.type === 'group') {
+                    eventTemplate.tags = [['g', channel.id]];
+                    eventTemplate.content = await Utils.crypto.aesEncrypt(content, channel.secretKey);
+                }
+                const event = await this.nostrService.publish(eventTemplate);
+                await this.processAndRenderMessage({...event, content}, this.state.currentChannelId);
+                this.uiManager.ui.messageInput.value = '';
+                this.uiManager.ui.messageInput.style.height = '44px';
+            } catch (e) {
+                console.error("Send message error:", e);
+            } finally {
+                this.uiManager.showLoading(false);
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => new NostrChatApp());
+</script>
+</body>
+</html>
