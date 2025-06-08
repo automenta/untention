@@ -67,11 +67,13 @@ export class Nostr extends EventEmitter {
             return;
         }
 
+        Logger.log(`[Nostr] Subscribing to '${id}' with filters:`, filters); // ADDED LOG for subscription filters
+
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
-                Logger.log(`[Nostr] Raw event received for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`); // ADDED LOG
+                Logger.log(`[Nostr] Raw event received for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`);
                 if (this.seenEventIds.has(event.id)) {
-                    Logger.log(`[Nostr] Event ${event.id.slice(0, 8)}... for sub '${id}' skipped (already seen).`); // ADDED LOG
+                    Logger.log(`[Nostr] Event ${event.id.slice(0, 8)}... for sub '${id}' skipped (already seen).`);
                     return;
                 }
                 this.seenEventIds.add(event.id);
@@ -154,7 +156,7 @@ export class Nostr extends EventEmitter {
 
         let filters = [];
         // Align public feed historical fetch with working feed.html's more conservative query.
-        const publicHistoricalPeriod = Utils.now() - (24 * 60 * 60); // Last 24 hours for public feed (was 1 hour)
+        const publicHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for public feed (was 24 hours)
         const publicHistoricalLimit = 20; // Limit to 20 events for public feed
         const dmGroupHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for DMs/Groups
 
