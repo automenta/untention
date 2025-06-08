@@ -421,6 +421,9 @@ class App {
             Logger.error('Unhandled promise rejection:', e.reason);
             this.ui.showToast(`Error: ${e.reason.message || 'Unknown error'}`, 'error');
         });
+
+        // NEW LOG: Verify NostrTools object
+        Logger.log('NostrTools object:', NostrTools);
     }
 
     async init() {

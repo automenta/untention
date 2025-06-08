@@ -68,6 +68,17 @@ export class Nostr extends EventEmitter {
         }
 
         Logger.log(`[Nostr] Subscribing to '${id}' with filters:`, filters);
+        // NEW LOGS: Detailed inspection of the filters array and its first element
+        Logger.log(`[Nostr] Type of filters: ${typeof filters}, isArray: ${Array.isArray(filters)}`);
+        if (Array.isArray(filters) && filters.length > 0) {
+            Logger.log(`[Nostr] Type of first filter element: ${typeof filters[0]}, isObject: ${typeof filters[0] === 'object' && filters[0] !== null}`);
+            try {
+                Logger.log(`[Nostr] JSON.stringify(filters[0]): ${JSON.stringify(filters[0])}`);
+            } catch (e) {
+                Logger.error(`[Nostr] Error stringifying filter:`, e);
+            }
+        }
+
 
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
