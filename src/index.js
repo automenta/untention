@@ -267,6 +267,12 @@ class MainView extends Component {
                 this.sendMessage();
             }
         });
+
+        this.previousThoughtId = null;
+        this.messageRenderQueue = []; // Queue for messages to be rendered incrementally
+        this.renderScheduled = false; // Flag to prevent multiple requestAnimationFrame calls
+        this.handleMessagesUpdated = this.queueMessagesForRender.bind(this); // Bind once for consistent listener
+
         this.app.dataStore.on('state:updated', s => this.update(s));
     }
 
@@ -276,19 +282,61 @@ class MainView extends Component {
             this.headerName.setContent('No Thought Selected');
             this.messages.setContent('<div class="message system"><div class="message-content">Select a thought to view messages.</div></div>');
             this.inputForm.show(false);
+            this.previousThoughtId = null; // Reset previous thought ID
             return;
         }
+
+        this.renderHeader(thought, profiles || {});
+        this.inputForm.show(!!identity.sk && thought.type !== 'note');
+
+        // If active thought changes, re-subscribe to messages and trigger a full render
         if (this.previousThoughtId !== activeThoughtId) {
             if (this.previousThoughtId) {
-                this.app.dataStore.off(`messages:${this.previousThoughtId}:updated`);
+                this.app.dataStore.off(`messages:${this.previousThoughtId}:updated`, this.handleMessagesUpdated);
             }
-            this.app.dataStore.on(`messages:${activeThoughtId}:updated`, () => this.renderMessages(this.app.dataStore.state));
-            // Messages are now loaded/fetched by AppController.selectThought
+            this.app.dataStore.on(`messages:${activeThoughtId}:updated`, this.handleMessagesUpdated);
+
+            // Clear existing messages in DOM and queue all current messages for a full render
+            this.messages.setContent(''); // Clear DOM
+            this.messageRenderQueue = [...(this.app.dataStore.state.messages[activeThoughtId] || [])]; // Queue all messages
+            this.scheduleRender(); // Schedule the full render
         }
+        // If the thought is the same, `queueMessagesForRender` will handle new messages
+        // and `App.selectThought` already clears unread.
+
         this.previousThoughtId = activeThoughtId;
-        this.renderHeader(thought, profiles || {});
-        this.renderMessages(this.app.dataStore.state);
-        this.inputForm.show(!!identity.sk && thought.type !== 'note');
+    }
+
+    queueMessagesForRender(updatedMessagesArray) {
+        // This function is called when `messages:tId:updated` is emitted.
+        // It receives the *entire* updated message array for the active thought.
+        // We need to determine which messages are new and add them to the queue.
+
+        // Optimization: If the message list is currently empty (e.g., initial load or new thought),
+        // just queue all messages from the updated array.
+        if (this.messages.element.children.length === 0) {
+            this.messageRenderQueue = [...updatedMessagesArray];
+        } else {
+            // Otherwise, find only the new messages that haven't been rendered yet.
+            const currentRenderedMessageIds = new Set(
+                Array.from(this.messages.element.children)
+                    .filter(el => el.classList.contains('message') && el.dataset.id)
+                    .map(el => el.dataset.id)
+            );
+            const messagesToAdd = updatedMessagesArray.filter(msg => !currentRenderedMessageIds.has(msg.id));
+            this.messageRenderQueue.push(...messagesToAdd);
+        }
+        this.scheduleRender();
+    }
+
+    scheduleRender() {
+        if (!this.renderScheduled) {
+            this.renderScheduled = true;
+            requestAnimationFrame(() => {
+                this.renderMessages();
+                this.renderScheduled = false;
+            });
+        }
     }
 
     renderHeader(thought, profiles) {
@@ -319,25 +367,37 @@ class MainView extends Component {
         }
     }
 
-    renderMessages({activeThoughtId, messages, identity, profiles} = {}) {
-        const msgs = messages?.[activeThoughtId] ?? [];
-        // Logger.log(`[MainView] Rendering ${msgs.length} messages for thought: ${activeThoughtId}`); // Removed diagnostic log
-        this.messages.setContent('');
-        if (!activeThoughtId || !messages) {
-            this.messages.add(new Component('div', {
-                className: 'message system',
-                innerHTML: `<div class="message-content">Error loading messages.</div>`
-            }));
+    renderMessages() {
+        const {activeThoughtId, identity, profiles} = this.app.dataStore.state;
+        const msgsToRender = [...this.messageRenderQueue]; // Take a snapshot of the queue
+        this.messageRenderQueue = []; // Clear the queue immediately
+
+        if (!activeThoughtId || !profiles) {
+            // This case should be handled by `update` setting initial content.
+            // If somehow we get here with no active thought, ensure empty state.
+            if (this.messages.element.children.length === 0) {
+                this.messages.add(new Component('div', {
+                    className: 'message system',
+                    innerHTML: `<div class="message-content">Error loading messages.</div>`
+                }));
+            }
             return;
         }
-        if (msgs.length === 0) {
+
+        if (msgsToRender.length === 0 && this.messages.element.children.length === 0) {
+            // If no messages to render and nothing currently displayed, show initial empty state
             this.messages.add(new Component('div', {
                 className: 'message system',
                 innerHTML: `<div class="message-content">${activeThoughtId === 'public' ? "Listening to Nostr's global feed..." : 'No messages yet.'}</div>`
             }));
             return;
         }
-        msgs.forEach(msg => {
+
+        // Sort messages in the current batch before rendering to ensure correct order
+        // This is important if messages arrive out of order or if the queue contains messages from a full re-render.
+        msgsToRender.sort((a, b) => a.created_at - b.created_at);
+
+        msgsToRender.forEach(msg => {
             if (!msg?.pubkey || !msg.created_at) return;
             const isSelf = msg.pubkey === identity?.pk;
             const p = profiles?.[msg.pubkey] ?? {name: Utils.shortenPubkey(msg.pubkey)};
@@ -347,9 +407,14 @@ class MainView extends Component {
                 className: `message ${isSelf ? 'self' : ''}`,
                 innerHTML: `<div class="message-avatar"><img class="avatar" src="${avatarSrc}" onerror="this.src='${Utils.createAvatarSvg(senderName, msg.pubkey)}'"></div><div class="message-content"><div class="message-header"><div class="message-sender" style="color: ${Utils.getUserColor(msg.pubkey)}">${Utils.escapeHtml(senderName)}</div><div class="message-time">${Utils.formatTime(msg.created_at)}</div></div><div class="message-text">${Utils.escapeHtml(msg.content || '')}</div></div>`
             });
+            msgEl.element.dataset.id = msg.id; // Store event ID on the element for tracking
             this.messages.add(msgEl);
         });
-        this.messages.element.scrollTop = this.messages.element.scrollHeight;
+
+        // After rendering, ensure the scroll position is at the bottom if new messages were added
+        if (msgsToRender.length > 0) {
+            this.messages.element.scrollTop = this.messages.element.scrollHeight;
+        }
     }
 
     sendMessage() {
@@ -619,48 +684,44 @@ class App {
         try {
             const {messages, activeThoughtId, identity} = this.dataStore.state;
 
-            // Ensure messages array exists for the thought, if not, initialize it.
             let msgs = messages[tId];
             if (!msgs) {
                 msgs = [];
-                this.dataStore.state.messages[tId] = msgs; // Update state directly for efficiency before setState
+                messages[tId] = msgs; // Update state directly
             }
 
-            // Check for duplicate messages by ID
             if (msgs.some(m => m.id === msg.id)) {
-                Logger.log(`[App] Duplicate message skipped for thought ${tId}: ${msg.id.slice(0, 8)}...`); // ADDED LOG
                 return;
             }
 
-            // Add new message
             msgs.push(msg);
-            //Logger.log(`[App] Added message ${msg.id.slice(0, 8)}... to thought ${tId}. Total: ${msgs.length}`); // ADDED LOG
 
-            // Implement circular buffer: remove oldest message if limit exceeded
             if (msgs.length > MESSAGE_LIMIT) {
                 msgs.shift();
             }
 
-            // Sort messages by creation time (necessary as events might arrive out of order)
             msgs.sort((a, b) => a.created_at - b.created_at);
 
-            this.dataStore.setState(s => {
-                // Update the thought's last event timestamp and unread count
-                const t = s.thoughts[tId];
-                if (t) {
-                    t.lastEventTimestamp = Math.max(t.lastEventTimestamp || 0, msg.created_at);
-                    if (tId !== activeThoughtId && msg.pubkey !== identity.pk) {
-                        t.unread = (t.unread || 0) + 1;
-                    }
+            // Update the thought's last event timestamp and unread count directly
+            const t = this.dataStore.state.thoughts[tId];
+            if (t) {
+                t.lastEventTimestamp = Math.max(t.lastEventTimestamp || 0, msg.created_at);
+                if (tId !== activeThoughtId && msg.pubkey !== identity.pk) {
+                    t.unread = (t.unread || 0) + 1;
                 }
-            });
+            }
 
-            // Persist messages for DMs and groups, but not for the public feed
             if (tId !== 'public') {
                 await this.dataStore.saveMessages(tId);
             }
 
-            // Fetch profile of the sender if not already known
+            // Emit message update event for the specific thought
+            this.dataStore.emit(`messages:${tId}:updated`, msgs);
+
+            // Emit general state update for ThoughtList and IdentityPanel
+            // This is crucial for the ThoughtList to update unread counts and sort order.
+            this.dataStore.emit('state:updated', this.dataStore.state);
+
             this.nostr.fetchProfile(msg.pubkey);
         } catch (e) {
             Logger.error(`Error processing message for ${tId}:`, e);
