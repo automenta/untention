@@ -844,9 +844,8 @@
             }
 
             let filters = [];
-            // DIAGNOSTIC: Try a very wide historical period for public feed to see if any events come back.
-            // For DMs/Groups, keep it at 7 days as they are more targeted.
-            const publicHistoricalPeriod = 0; // Unix epoch (all time) for public feed
+            // Use a more reasonable historical period for public feed, similar to feed.html's success.
+            const publicHistoricalPeriod = Utils.now() - (24 * 60 * 60); // Last 24 hours for public feed
             const dmGroupHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for DMs/Groups
 
             if (thought.type === 'public') {
