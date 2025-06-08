@@ -542,6 +542,7 @@ class App {
 
     async processNostrEvent(event, subId) {
         try {
+            Logger.log(`[App] Processing Nostr event: kind=${event.kind}, subId=${subId}, id=${event.id}`); // ADDED LOG
             if (!verifyEvent(event)) {
                 Logger.warn('Invalid event signature:', event);
                 return;

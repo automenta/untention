@@ -69,6 +69,7 @@ export class Nostr extends EventEmitter {
 
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
+                Logger.log(`[Nostr] Received event for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`); // ADDED LOG
                 if (this.seenEventIds.has(event.id)) return;
                 this.seenEventIds.add(event.id);
                 if (this.seenEventIds.size > 2000) {
@@ -174,7 +175,7 @@ export class Nostr extends EventEmitter {
         Logger.log(`Attempting to fetch historical messages for thought ${thought.id} (${thought.type}) with filters:`, filters, 'from relays:', relays);
         try {
             const events = await this.pool.querySync(relays, filters);
-            Logger.log(`Fetched ${events.length} historical events for ${thought.id}`);
+            Logger.log(`Fetched ${events.length} historical events for ${thought.id}. First event (if any):`, events[0]); // ADDED LOG
             for (const event of events) {
                 await this.appController.processNostrEvent(event, `historical-${thought.id}`);
             }
