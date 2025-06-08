@@ -67,10 +67,13 @@ export class Nostr extends EventEmitter {
             return;
         }
 
-        Logger.log(`[Nostr] Subscribing to '${id}' with filters:`, filters); // ADDED LOG for subscription filters
+        Logger.log(`[Nostr] Subscribing to '${id}' with filters:`, filters);
 
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
+                // THIS IS THE CRITICAL NEW LOG: It will fire for ANY event received by SimplePool for this sub.
+                Logger.log(`[Nostr] === Event received by SimplePool for sub '${id}' ===`, event); 
+
                 Logger.log(`[Nostr] Raw event received for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`);
                 if (this.seenEventIds.has(event.id)) {
                     Logger.log(`[Nostr] Event ${event.id.slice(0, 8)}... for sub '${id}' skipped (already seen).`);
@@ -78,10 +81,8 @@ export class Nostr extends EventEmitter {
                 }
                 this.seenEventIds.add(event.id);
                 if (this.seenEventIds.size > 2000) {
-                    // Keep the seenEventIds set from growing indefinitely
-                    // Simple approach: convert to array, slice, convert back to Set
                     const tempArray = Array.from(this.seenEventIds);
-                    this.seenEventIds = new Set(tempArray.slice(tempArray.length - 1500)); // Keep last 1500
+                    this.seenEventIds = new Set(tempArray.slice(tempArray.length - 1500));
                 }
                 this.emit('event', {event, subId: id});
             },
