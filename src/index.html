@@ -706,6 +706,7 @@
             this.subs = new Map();
             this.seenEventIds = new Set();
             this.connectionStatus = 'disconnected';
+            this.appController = null; // Will be set by AppController
         }
 
         connect() {
@@ -726,7 +727,6 @@
 
         disconnect() {
             // Unsubscribe all active subscriptions first
-            // FIXED: Ensure sub.unsub() is called safely.
             this.subs.forEach(sub => {
                 if (sub && typeof sub.unsub === 'function') {
                     sub.unsub();
@@ -804,10 +804,14 @@
                 Logger.warn('Not subscribing to core events: No relays available.');
                 return;
             }
-            this.subscribe('public', [{kinds: [1], limit: 50}]);
+            // These subscriptions are for real-time streaming of new events.
+            // Historical fetching is handled by fetchHistoricalMessages.
+            const oneDayAgo = Utils.now() - (24 * 60 * 60); // Events from the last 24 hours for live stream
+            this.subscribe('public', [{kinds: [1], since: oneDayAgo}]); // No limit here, just stream
             const {identity} = this.dataStore.state;
             if (identity.pk) {
-                this.subscribe('dms', [{kinds: [4], '#p': [identity.pk], limit: MESSAGE_LIMIT}]);
+                const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60); // Events from the last 7 days for live stream
+                this.subscribe('dms', [{kinds: [4], '#p': [identity.pk], since: sevenDaysAgo}]);
                 this.subscribe('profile', [{kinds: [0], authors: [identity.pk], limit: 1}]);
                 this.resubscribeToGroups();
             }
@@ -817,13 +821,53 @@
             const gids = Object.values(this.dataStore.state.thoughts).filter(c => c.type === 'group').map(c => c.id);
             const currentRelays = this.dataStore.state.relays;
             if (gids.length > 0 && currentRelays.length > 0) {
+                const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60); // Events from the last 7 days for live stream
                 this.subscribe('groups', [{
                     kinds: [41],
                     '#g': gids,
-                    limit: MESSAGE_LIMIT * gids.length // Fetch more messages if there are many groups
+                    since: sevenDaysAgo
                 }]);
             } else {
                 this.subs.get('groups')?.unsub();
+            }
+        }
+
+        /**
+         * Fetches historical messages for a specific thought using querySync.
+         * These events will then be processed by AppController.processNostrEvent.
+         */
+        async fetchHistoricalMessages(thought) {
+            const { identity, relays } = this.dataStore.state;
+            if (relays.length === 0 || !thought || !this.appController) {
+                Logger.warn('Cannot fetch historical messages: Missing relays, thought, or appController reference.');
+                return;
+            }
+
+            let filters = [];
+            const historicalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for historical fetch
+
+            if (thought.type === 'public') {
+                filters.push({ kinds: [1], limit: MESSAGE_LIMIT, since: historicalPeriod });
+            } else if (thought.type === 'dm' && identity.pk) {
+                // For DMs, fetch messages between self and the other party
+                filters.push({ kinds: [4], '#p': [thought.pubkey], authors: [identity.pk, thought.pubkey], limit: MESSAGE_LIMIT, since: historicalPeriod });
+            } else if (thought.type === 'group') {
+                filters.push({ kinds: [41], '#g': [thought.id], limit: MESSAGE_LIMIT, since: historicalPeriod });
+            } else {
+                return; // No historical fetch for other types or if not logged in for DMs/groups
+            }
+
+            Logger.log(`Fetching historical messages for thought ${thought.id} (${thought.type})`);
+            try {
+                const events = await this.pool.querySync(relays, filters);
+                Logger.log(`Fetched ${events.length} historical events for ${thought.id}`);
+                // Process each fetched event as if it came from a subscription
+                // This will handle decryption, deduplication, and adding to DataStore
+                for (const event of events) {
+                    await this.appController.processNostrEvent(event, `historical-${thought.id}`);
+                }
+            } catch (e) {
+                Logger.error(`Failed to fetch historical messages for ${thought.id}:`, e);
             }
         }
 
@@ -1036,7 +1080,7 @@
                     this.app.dataStore.off(`messages:${this.previousThoughtId}:updated`);
                 }
                 this.app.dataStore.on(`messages:${activeThoughtId}:updated`, () => this.renderMessages(this.app.dataStore.state));
-                this.app.dataStore.loadMessages(activeThoughtId);
+                // Messages are now loaded/fetched by AppController.selectThought
             }
             this.previousThoughtId = activeThoughtId;
             this.renderHeader(thought, profiles || {});
@@ -1167,6 +1211,7 @@
             this.ui = new UIManager();
             this.nostr = new NostrService(this.dataStore);
             this.nostr.ui = this.ui;
+            this.nostr.appController = this; // Pass reference to AppController for historical fetches
             this.init();
             window.addEventListener('unhandledrejection', e => {
                 Logger.error('Unhandled promise rejection:', e.reason);
@@ -1193,14 +1238,46 @@
             this.dataStore.on('state:updated', ({identity}) => {
                 if (this.currentPk !== undefined && this.currentPk !== identity.pk) {
                     this.currentPk = identity.pk;
-                    this.nostr.connect();
+                    this.nostr.connect(); // This will re-subscribe core events
                 }
             });
 
             await this.dataStore.load();
             this.currentPk = this.dataStore.state.identity.pk;
-            this.nostr.connect();
+            this.nostr.connect(); // This sets up the continuous subscriptions
+
+            // After initial load and connection, fetch historical messages for the active thought
+            // This ensures the initial view is populated even if localforage is empty
+            await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[this.dataStore.state.activeThoughtId]);
+
             this.ui.setLoading(false);
+        }
+
+        async selectThought(id) {
+            const { activeThoughtId, thoughts } = this.dataStore.state;
+            const newActiveThoughtId = thoughts[id] ? id : 'public';
+
+            // Only re-fetch and update if the thought actually changes
+            if (activeThoughtId !== newActiveThoughtId) {
+                this.dataStore.setState(s => {
+                    s.activeThoughtId = newActiveThoughtId;
+                    const t = s.thoughts[s.activeThoughtId];
+                    if (t?.unread > 0) t.unread = 0;
+                });
+                await this.dataStore.saveActiveThoughtId();
+
+                // Load messages from localforage first
+                await this.dataStore.loadMessages(newActiveThoughtId);
+                // Then fetch recent historical messages from relays
+                await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[newActiveThoughtId]);
+            } else {
+                // If the same thought is selected, just ensure unread is cleared
+                this.dataStore.setState(s => {
+                    const t = s.thoughts[s.activeThoughtId];
+                    if (t?.unread > 0) t.unread = 0;
+                });
+                await this.dataStore.saveActiveThoughtId();
+            }
         }
 
         handleAction(action, data) {
@@ -1218,15 +1295,6 @@
                 'remove-relay': (url) => this.updateRelays(this.dataStore.state.relays.filter(u => u !== url)),
             };
             if (actions[action]) actions[action](data);
-        }
-
-        selectThought(id) {
-            this.dataStore.setState(s => {
-                s.activeThoughtId = s.thoughts[id] ? id : 'public';
-                const t = s.thoughts[s.activeThoughtId];
-                if (t?.unread > 0) t.unread = 0;
-            });
-            this.dataStore.saveActiveThoughtId();
         }
 
         async leaveThought() {
@@ -1283,7 +1351,7 @@
                         return await this.processKind0(event);
 
                     case 1: // Public text note
-                        if (subId === 'public') { // Ensure it's from the public feed subscription
+                        if (subId === 'public' || subId.startsWith('historical-public')) { // Ensure it's from the public feed subscription or historical fetch
                             thoughtId = 'public';
                         } else {
                             return; // Ignore other kind 1s (e.g., replies fetched for other reasons)
