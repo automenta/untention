@@ -6,7 +6,17 @@ export const Utils = {
     base64ToUint8Array: s => new Uint8Array(atob(s).split("").map(c => c.charCodeAt(0))),
     shortenPubkey: p => p ? `${p.slice(0, 8)}...${p.slice(-4)}` : '?',
     formatTime: t => new Date(t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
-    escapeHtml: u => u?.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "\"").replace(/'/g, "'") ?? '',
+    // Corrected HTML escaping function
+    escapeHtml: text => {
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text?.replace(/[&<>"']/g, char => map[char]) ?? '';
+    },
     findTag: (e, k) => e.tags.find(t => t[0] === k)?.[1],
     getUserColor: p => {
         const c = ['#4dabf7', '#20c997', '#f06595', '#cc5de8', '#5c7cfa', '#fcc419', '#ff8787', '#74b816'];
@@ -14,6 +24,7 @@ export const Utils = {
     },
     createAvatarSvg(t, s) {
         const i = (t?.charAt(0) || '?').toUpperCase(), o = this.getUserColor(s);
+        // Ensure the escaped text is used for the SVG content
         return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${this.escapeHtml(o)}"/><text x="50%" y="50%" font-size="50" dominant-baseline="central" text-anchor="middle" fill="white" font-family="system-ui, sans-serif">${this.escapeHtml(i)}</text></svg>`)}`;
     },
     crypto: {

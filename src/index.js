@@ -727,8 +727,8 @@ class AppController {
 
     handleAction(action, data) {
         const actions = {
-            'manage-identity': () => this.dataStore.state.identity.sk ? this.logout() : this.showIdentityModal(),
-            'show-modal': (modal) => this.showModal(modal),
+            'manage-identity': () => this.dataStore.state.identity.sk ? this.logout() : this._showIdentityModal(),
+            'show-modal': (modal) => this.showModal(modal), // This will dispatch to specific modal methods
             'select-thought': (id) => this.selectThought(id),
             'leave-thought': () => this.leaveThought(),
             'send-message': (content) => this.sendMessage(content),
@@ -1065,7 +1065,8 @@ class AppController {
         this.ui.showToast('Relay list updated. Reconnecting...', 'info');
     }
 
-    showIdentityModal() {
+    // Refactored modal display methods
+    _showIdentityModal() {
         const form = new Component('form', {
             onsubmit: e => {
                 e.preventDefault();
@@ -1086,128 +1087,203 @@ class AppController {
         });
     }
 
-    showModal(name) {
-        const {identity, activeThoughtId, thoughts, relays} = this.dataStore.state;
+    _showProfileModal() {
+        const {identity} = this.dataStore.state;
         const p = identity.profile ?? {};
-        const modals = {
-            profile: {
-                title: 'Edit Profile',
-                fields: [{n: 'name', v: p.name}, {n: 'picture', v: p.picture}, {n: 'nip05', v: p.nip05}],
-                action: 'update-profile'
-            },
-            createGroup: {title: 'Create Group', fields: [{n: 'name', p: 'Group Name'}], action: 'create-group'},
-            joinGroup: {
-                title: 'Join Group',
-                fields: [{n: 'id', p: 'Group ID'}, {n: 'key', p: 'Secret Key'}, {n: 'name', p: 'Group Name'}],
-                action: 'join-group'
-            },
-            createDm: {
-                title: 'New Direct Message',
-                fields: [{n: 'pubkey', p: "Recipient's Public Key (npub or hex)"}],
-                action: 'create-dm'
-            },
-            groupInfo: {
-                title: 'Group Info',
-                static: true, // Indicates fields are read-only
-                fields: [{n: 'id', v: activeThoughtId, p: 'ID'}, {
-                    n: 'key',
-                    v: thoughts[activeThoughtId]?.secretKey,
-                    p: 'Secret Key'
-                }]
-            },
-            relays: {title: 'Manage Relays'}
-        };
-        const m = modals[name];
-        if (!m) return;
-
-        if (name === 'relays') {
-            const body = new Component('div');
-            const list = new Component('ul', {
-                style: {
-                    listStyle: 'none',
-                    padding: 0,
-                    maxHeight: '150px',
-                    overflowY: 'auto',
-                    borderBottom: '1px solid var(--border)',
-                    paddingBottom: '10px',
-                    marginBottom: '10px'
-                }
-            });
-            relays.forEach(url => {
-                const listItem = new Component('li', {
-                    style: {
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '6px 0'
-                    }
-                });
-                listItem.add(new Component('span', {
-                    textContent: Utils.escapeHtml(url),
-                    style: {
-                        flex: 1,
-                        marginLeft: '8px',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                    }
-                }));
-                listItem.add(new Button({
-                    textContent: 'Remove',
-                    className: 'danger',
-                    onClick: () => this.handleAction('remove-relay', url)
-                }));
-                list.add(listItem);
-            });
-            const form = new Component('form', {
-                onsubmit: e => {
-                    e.preventDefault();
-                    this.handleAction('add-relay', new FormData(e.target));
-                    e.target.reset(); // Clear input after adding
-                }
-            });
-            form.add(new Component('label', {textContent: 'Add Relay:'}), new Component('input', {
-                name: 'url',
-                placeholder: 'wss://...'
-            }), new Button({textContent: 'Add', type: 'submit'}));
-            body.add(list, form);
-            this.ui.showModal({
-                title: m.title,
-                body,
-                buttons: [new Button({
-                    textContent: 'Close',
-                    className: 'secondary',
-                    onClick: () => this.ui.hideModal()
-                })]
-            });
-            return;
-        }
         const form = new Component('form', {
             onsubmit: e => {
                 e.preventDefault();
-                this.handleAction(m.action, new FormData(e.target));
+                this.handleAction('update-profile', new FormData(e.target));
             }
         });
-        m.fields.forEach(f => {
-            const labelText = f.p || f.n; // Use placeholder text if available, otherwise field name
-            const inputElement = new Component('input', {
-                name: f.n,
-                value: f.v ?? '',
-                readOnly: m.static,
-                type: (f.n === 'key' && m.static) ? 'text' : 'text' // Keep secret key visible if static for copy
-            });
-            form.add(new Component('label', {textContent: labelText + ':'}), inputElement);
+        form.add(
+            new Component('label', {textContent: 'Name:'}),
+            new Component('input', {name: 'name', value: p.name ?? ''}),
+            new Component('label', {textContent: 'Picture URL:'}),
+            new Component('input', {name: 'picture', value: p.picture ?? ''}),
+            new Component('label', {textContent: 'NIP-05 Identifier:'}),
+            new Component('input', {name: 'nip05', value: p.nip05 ?? ''})
+        );
+        this.ui.showModal({
+            title: 'Edit Profile',
+            body: form,
+            buttons: [
+                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
+                new Button({textContent: 'Save', type: 'submit', onClick: () => form.element.requestSubmit()})
+            ]
         });
-        const buttons = m.static ? [new Button({
-            textContent: 'Close',
-            className: 'secondary',
-            onClick: () => this.ui.hideModal()
-        })] : [new Button({
-            textContent: 'Cancel',
-            className: 'secondary',
-            onClick: () => this.ui.hideModal()
-        }), new Button({textContent: 'Save', type: 'submit', onClick: () => form.element.requestSubmit()})];
-        this.ui.showModal({title: m.title, body: form, buttons});
+    }
+
+    _showCreateGroupModal() {
+        const form = new Component('form', {
+            onsubmit: e => {
+                e.preventDefault();
+                this.handleAction('create-group', new FormData(e.target));
+            }
+        });
+        form.add(
+            new Component('label', {textContent: 'Group Name:'}),
+            new Component('input', {name: 'name', placeholder: 'Group Name'})
+        );
+        this.ui.showModal({
+            title: 'Create Group',
+            body: form,
+            buttons: [
+                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
+                new Button({textContent: 'Create', type: 'submit', onClick: () => form.element.requestSubmit()})
+            ]
+        });
+    }
+
+    _showJoinGroupModal() {
+        const form = new Component('form', {
+            onsubmit: e => {
+                e.preventDefault();
+                this.handleAction('join-group', new FormData(e.target));
+            }
+        });
+        form.add(
+            new Component('label', {textContent: 'Group ID:'}),
+            new Component('input', {name: 'id', placeholder: 'Group ID'}),
+            new Component('label', {textContent: 'Secret Key (Base64):'}),
+            new Component('input', {name: 'key', placeholder: 'Secret Key'}),
+            new Component('label', {textContent: 'Group Name (Optional, for display):'}),
+            new Component('input', {name: 'name', placeholder: 'Group Name'})
+        );
+        this.ui.showModal({
+            title: 'Join Group',
+            body: form,
+            buttons: [
+                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
+                new Button({textContent: 'Join', type: 'submit', onClick: () => form.element.requestSubmit()})
+            ]
+        });
+    }
+
+    _showCreateDmModal() {
+        const form = new Component('form', {
+            onsubmit: e => {
+                e.preventDefault();
+                this.handleAction('create-dm', new FormData(e.target));
+            }
+        });
+        form.add(
+            new Component('label', {textContent: "Recipient's Public Key (npub or hex):"}),
+            new Component('input', {name: 'pubkey', placeholder: "npub..."})
+        );
+        this.ui.showModal({
+            title: 'New Direct Message',
+            body: form,
+            buttons: [
+                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
+                new Button({textContent: 'Start DM', type: 'submit', onClick: () => form.element.requestSubmit()})
+            ]
+        });
+    }
+
+    _showGroupInfoModal() {
+        const {activeThoughtId, thoughts} = this.dataStore.state;
+        const group = thoughts[activeThoughtId];
+        if (!group || group.type !== 'group') {
+            this.ui.showToast('Not a group thought.', 'error');
+            return;
+        }
+        const form = new Component('form');
+        form.add(
+            new Component('label', {textContent: 'Group ID:'}),
+            new Component('input', {name: 'id', value: group.id, readOnly: true}),
+            new Component('label', {textContent: 'Secret Key (Base64):'}),
+            new Component('input', {name: 'key', value: group.secretKey, readOnly: true, type: 'text'}) // Keep visible for copy
+        );
+        this.ui.showModal({
+            title: 'Group Info',
+            body: form,
+            buttons: [
+                new Button({textContent: 'Close', className: 'secondary', onClick: () => this.ui.hideModal()})
+            ]
+        });
+    }
+
+    _showRelaysModal() {
+        const {relays} = this.dataStore.state;
+        const body = new Component('div');
+        const list = new Component('ul', {
+            style: {
+                listStyle: 'none',
+                padding: 0,
+                maxHeight: '150px',
+                overflowY: 'auto',
+                borderBottom: '1px solid var(--border)',
+                paddingBottom: '10px',
+                marginBottom: '10px'
+            }
+        });
+        relays.forEach(url => {
+            const listItem = new Component('li', {
+                style: {
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '6px 0'
+                }
+            });
+            listItem.add(new Component('span', {
+                textContent: Utils.escapeHtml(url),
+                style: {
+                    flex: 1,
+                    marginLeft: '8px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                }
+            }));
+            listItem.add(new Button({
+                textContent: 'Remove',
+                className: 'danger',
+                onClick: () => this.handleAction('remove-relay', url)
+            }));
+            list.add(listItem);
+        });
+        const form = new Component('form', {
+            onsubmit: e => {
+                e.preventDefault();
+                this.handleAction('add-relay', new FormData(e.target));
+                e.target.reset(); // Clear input after adding
+            }
+        });
+        form.add(new Component('label', {textContent: 'Add Relay:'}), new Component('input', {
+            name: 'url',
+            placeholder: 'wss://...'
+        }), new Button({textContent: 'Add', type: 'submit'}));
+        body.add(list, form);
+        this.ui.showModal({
+            title: 'Manage Relays',
+            body,
+            buttons: [new Button({
+                textContent: 'Close',
+                className: 'secondary',
+                onClick: () => this.ui.hideModal()
+            })]
+        });
+    }
+
+    // Dispatcher for modal types
+    showModal(name) {
+        const modalDispatch = {
+            'profile': this._showProfileModal,
+            'createGroup': this._showCreateGroupModal,
+            'joinGroup': this._showJoinGroupModal,
+            'createDm': this._showCreateDmModal,
+            'groupInfo': this._showGroupInfoModal,
+            'relays': this._showRelaysModal,
+            // 'identity' is handled directly by handleAction 'manage-identity'
+        };
+        const handler = modalDispatch[name];
+        if (handler) {
+            handler.call(this); // Call the specific modal handler
+        } else {
+            Logger.warn(`Unknown modal type: ${name}`);
+        }
     }
 }
 
