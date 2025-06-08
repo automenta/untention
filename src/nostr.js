@@ -83,11 +83,11 @@ export class Nostr extends EventEmitter {
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
                 // THIS IS THE CRITICAL NEW LOG: It will fire for ANY event received by SimplePool for this sub.
-                Logger.log(`[Nostr] === Event received by SimplePool for sub '${id}' ===`, event); 
+                //Logger.log(`[Nostr] === Event received by SimplePool for sub '${id}' ===`, event);
 
-                Logger.log(`[Nostr] Raw event received for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`);
+                //Logger.log(`[Nostr] Raw event received for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`);
                 if (this.seenEventIds.has(event.id)) {
-                    Logger.log(`[Nostr] Event ${event.id.slice(0, 8)}... for sub '${id}' skipped (already seen).`);
+                    //Logger.log(`[Nostr] Event ${event.id.slice(0, 8)}... for sub '${id}' skipped (already seen).`);
                     return;
                 }
                 this.seenEventIds.add(event.id);
@@ -130,7 +130,12 @@ export class Nostr extends EventEmitter {
         // Historical fetching is handled by fetchHistoricalMessages.
         // Removed 'since' filter for public feed to align with working snippet's behavior
         // and receive all new incoming messages regardless of age.
-        this.subscribe('public', [{kinds: [1]}]); // No limit or since here, just stream
+        this.subscribe('public', {kinds: [1]},
+            {
+                onevent(event) {
+
+                }
+            });
         const {identity} = this.dataStore.state;
         if (identity.pk) {
             const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60); // Events from the last 7 days for live stream
@@ -189,10 +194,10 @@ export class Nostr extends EventEmitter {
             return;
         }
 
-        Logger.log(`Attempting to fetch historical messages for thought ${thought.id} (${thought.type}) with filters:`, filters, 'from relays:', relays);
+        //Logger.log(`Attempting to fetch historical messages for thought ${thought.id} (${thought.type}) with filters:`, filters, 'from relays:', relays);
         try {
             const events = await this.pool.querySync(relays, filters);
-            Logger.log(`Fetched ${events.length} historical events for ${thought.id}. First event (if any):`, events[0]);
+            //Logger.log(`Fetched ${events.length} historical events for ${thought.id}. First event (if any):`, events[0]);
             for (const event of events) {
                 await this.appController.processNostrEvent(event, `historical-${thought.id}`);
             }

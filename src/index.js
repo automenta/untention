@@ -3,10 +3,7 @@ import {EventEmitter, Logger, Utils} from "./utils.js";
 import {Button, Component} from "./ui.js";
 import {Nostr} from "./nostr.js";
 
-// Changed import from global NostrTools to direct module import
-import {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04, SimplePool} from 'nostr-tools';
-// Added import for localforage
-import localforage from 'localforage';
+const {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04, SimplePool} = NostrTools;
 
 const MESSAGE_LIMIT = 100; // Max messages to keep per thought
 
@@ -548,7 +545,7 @@ class App {
 
     async processNostrEvent(event, subId) {
         try {
-            Logger.log(`[App] Processing Nostr event: kind=${event.kind}, subId=${subId}, id=${event.id}`);
+            //Logger.log(`[App] Processing Nostr event: kind=${event.kind}, subId=${subId}, id=${event.id}`);
             if (!verifyEvent(event)) {
                 Logger.warn('Invalid event signature:', event);
                 return;
@@ -637,7 +634,7 @@ class App {
 
             // Add new message
             msgs.push(msg);
-            Logger.log(`[App] Added message ${msg.id.slice(0, 8)}... to thought ${tId}. Total: ${msgs.length}`); // ADDED LOG
+            //Logger.log(`[App] Added message ${msg.id.slice(0, 8)}... to thought ${tId}. Total: ${msgs.length}`); // ADDED LOG
 
             // Implement circular buffer: remove oldest message if limit exceeded
             if (msgs.length > MESSAGE_LIMIT) {
