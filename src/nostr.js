@@ -211,7 +211,7 @@ export class Nostr extends EventEmitter {
         if (!pubkey || profiles[pubkey]?.lastUpdatedAt || fetchingProfiles.has(pubkey) || relays.length === 0) return;
 
         fetchingProfiles.add(pubkey);
-        this.emit('state:updated', this.dataStore.state);
+        this.dataStore.emitStateUpdated(); // Changed to debounced emitter
 
         try {
             const event = await this.pool.get(relays, {kinds: [0], authors: [pubkey]});
@@ -222,7 +222,7 @@ export class Nostr extends EventEmitter {
             Logger.warn(`Profile fetch failed for ${pubkey}:`, e);
         } finally {
             fetchingProfiles.delete(pubkey);
-            this.emit('state:updated', this.dataStore.state);
+            this.dataStore.emitStateUpdated(); // Changed to debounced emitter
         }
     }
 }

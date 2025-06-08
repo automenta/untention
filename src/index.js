@@ -28,6 +28,8 @@ class Data extends EventEmitter {
             activeThoughtId: 'public',
             fetchingProfiles: new Set(),
         };
+        this.debounceTimer = null; // NEW: For debouncing state updates
+        this.DEBOUNCE_DELAY = 100; // NEW: Debounce delay in ms
     }
 
     async load() {
@@ -66,17 +68,28 @@ class Data extends EventEmitter {
                 this.state.identity.profile = this.state.profiles[this.state.identity.pk];
             }
             Object.values(this.state.thoughts).forEach(th => th.lastEventTimestamp = th.lastEventTimestamp ?? 0);
-            this.emit('state:updated', this.state);
+            this.emitStateUpdated(); // Changed to debounced emitter
         } catch (e) {
             Logger.error('DataStore load failed:', e);
             await this.clearIdentity();
-            this.emit('state:updated', this.state);
+            this.emitStateUpdated(); // Changed to debounced emitter
         }
     }
 
     setState(updater) {
         updater(this.state);
-        this.emit('state:updated', this.state);
+        this.emitStateUpdated(); // Changed to debounced emitter
+    }
+
+    // NEW: Debounced state update emitter
+    emitStateUpdated() {
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+        }
+        this.debounceTimer = setTimeout(() => {
+            this.emit('state:updated', this.state);
+            this.debounceTimer = null;
+        }, this.DEBOUNCE_DELAY);
     }
 
     async saveIdentity(sk) {
@@ -736,9 +749,8 @@ class App {
             // Emit message update event for the specific thought
             this.dataStore.emit(`messages:${tId}:updated`, msgs);
 
-            // Emit general state update for ThoughtList and IdentityPanel
-            // This is crucial for the ThoughtList to update unread counts and sort order.
-            this.dataStore.emit('state:updated', this.dataStore.state);
+            // Emit general state update for ThoughtList and IdentityPanel (now debounced)
+            this.dataStore.emitStateUpdated(); // Changed to debounced emitter
 
             this.nostr.fetchProfile(msg.pubkey);
         } catch (e) {
