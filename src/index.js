@@ -272,7 +272,8 @@ class MainView extends Component {
         this.messageRenderQueue = []; // Queue for messages to be rendered incrementally
         this.renderScheduled = false; // Flag to prevent multiple requestAnimationFrame calls
         this.handleMessagesUpdated = this.queueMessagesForRender.bind(this); // Bind once for consistent listener
-        this.renderedMessageIds = new Set(); // NEW: Keep track of IDs of messages currently in DOM
+        this.renderedMessageIds = new Set(); // Keep track of IDs of messages currently in DOM
+        this.DISPLAY_MESSAGE_LIMIT = 50; // NEW: Limit for messages displayed in UI
 
         this.app.dataStore.on('state:updated', s => this.update(s));
     }
@@ -306,10 +307,11 @@ class MainView extends Component {
             this.messageRenderQueue = []; // Clear any pending messages from previous thought
             this.renderedMessageIds.clear(); // Reset the set of rendered IDs
 
-            // Manually queue all current messages for the new thought for the initial render
+            // Manually queue only the latest DISPLAY_MESSAGE_LIMIT messages for the new thought for the initial render
             const currentMessages = this.app.dataStore.state.messages[activeThoughtId] || [];
-            this.messageRenderQueue.push(...currentMessages);
-            currentMessages.forEach(msg => this.renderedMessageIds.add(msg.id)); // Populate rendered IDs for initial batch
+            const initialMessagesToRender = currentMessages.slice(-this.DISPLAY_MESSAGE_LIMIT);
+            this.messageRenderQueue.push(...initialMessagesToRender);
+            initialMessagesToRender.forEach(msg => this.renderedMessageIds.add(msg.id)); // Populate rendered IDs for initial batch
 
             this.scheduleRender(); // Schedule the full render
         }
@@ -398,6 +400,8 @@ class MainView extends Component {
         // Sort messages in the current batch before rendering to ensure correct order
         msgsToRender.sort((a, b) => a.created_at - b.created_at);
 
+        const fragment = document.createDocumentFragment(); // Use a document fragment for efficient DOM updates
+
         msgsToRender.forEach(msg => {
             if (!msg?.pubkey || !msg.created_at) return;
 
@@ -410,8 +414,19 @@ class MainView extends Component {
                 innerHTML: `<div class="message-avatar"><img class="avatar" src="${avatarSrc}" onerror="this.src='${Utils.createAvatarSvg(senderName, msg.pubkey)}'"></div><div class="message-content"><div class="message-header"><div class="message-sender" style="color: ${Utils.getUserColor(msg.pubkey)}">${Utils.escapeHtml(senderName)}</div><div class="message-time">${Utils.formatTime(msg.created_at)}</div></div><div class="message-text">${Utils.escapeHtml(msg.content || '')}</div></div>`
             });
             msgEl.element.dataset.id = msg.id; // Store event ID on the element for tracking
-            this.messages.add(msgEl);
+            fragment.appendChild(msgEl.element); // Append to fragment
         });
+
+        this.messages.element.appendChild(fragment); // Append fragment to DOM once
+
+        // NEW: Prune old messages if exceeding display limit
+        while (this.messages.element.children.length > this.DISPLAY_MESSAGE_LIMIT) {
+            const oldestChild = this.messages.element.firstElementChild;
+            if (oldestChild && oldestChild.dataset.id) {
+                this.renderedMessageIds.delete(oldestChild.dataset.id);
+            }
+            oldestChild.remove();
+        }
 
         // After rendering, ensure the scroll position is at the bottom if new messages were added
         // ONLY if the user was already at the bottom or if it's the initial load.
