@@ -844,12 +844,13 @@
             }
 
             let filters = [];
-            // Use a more reasonable historical period for public feed, similar to feed.html's success.
-            const publicHistoricalPeriod = Utils.now() - (24 * 60 * 60); // Last 24 hours for public feed
+            // Align public feed historical fetch with working feed.html's more conservative query.
+            const publicHistoricalPeriod = Utils.now() - (60 * 60); // Last 1 hour for public feed
+            const publicHistoricalLimit = 20; // Limit to 20 events for public feed
             const dmGroupHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for DMs/Groups
 
             if (thought.type === 'public') {
-                filters.push({ kinds: [1], limit: MESSAGE_LIMIT, since: publicHistoricalPeriod });
+                filters.push({ kinds: [1], limit: publicHistoricalLimit, since: publicHistoricalPeriod });
             } else if (thought.type === 'dm' && identity.pk) {
                 filters.push({ kinds: [4], '#p': [thought.pubkey], authors: [identity.pk, thought.pubkey], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod });
             } else if (thought.type === 'group') {
