@@ -253,8 +253,9 @@ class NostrService extends EventEmitter {
         }
         // These subscriptions are for real-time streaming of new events.
         // Historical fetching is handled by fetchHistoricalMessages.
-        const oneDayAgo = Utils.now() - (24 * 60 * 60); // Events from the last 24 hours for live stream
-        this.subscribe('public', [{kinds: [1], since: oneDayAgo}]); // No limit here, just stream
+        // Removed 'since' filter for public feed to align with working snippet's behavior
+        // and receive all new incoming messages regardless of age.
+        this.subscribe('public', [{kinds: [1]}]); // No limit or since here, just stream
         const {identity} = this.dataStore.state;
         if (identity.pk) {
             const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60); // Events from the last 7 days for live stream
