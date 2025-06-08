@@ -192,6 +192,11 @@ class IdentityPanel extends Component {
                 textContent: 'Relays',
                 className: 'secondary',
                 onClick: () => this.app.handleAction('show-modal', 'relays')
+            }),
+            createNote: new Button({ // New button for creating notes
+                textContent: 'New Note',
+                className: 'secondary',
+                onClick: () => this.app.handleAction('create-note')
             })
         };
         const userInfo = new Component('div', {className: 'user-info'}).add(this.avatar, new Component('div', {className: 'user-details'}).add(this.userName, this.userPubkey));
@@ -269,7 +274,20 @@ class MainView extends Component {
         this.input = new Component('textarea', {id: 'message-input', placeholder: 'Type your message...'});
         this.sendButton = new Button({textContent: 'Send', type: 'submit'});
         this.inputForm.add(this.input, this.sendButton);
-        this.add(this.header, this.messages, this.inputForm);
+
+        // Note Editor Components
+        this.noteTitleInput = new Component('input', { id: 'note-title-input', type: 'text', placeholder: 'Note Title' });
+        this.noteBodyTextarea = new Component('textarea', { id: 'note-body-textarea', placeholder: 'Your note...' });
+        this.noteEditorContainer = new Component('div', { id: 'note-editor-container' });
+        this.noteEditorContainer.add(this.noteTitleInput, this.noteBodyTextarea);
+        this.noteEditorContainer.show(false); // Initially hidden
+
+        this.add(this.header, this.noteEditorContainer, this.messages, this.inputForm);
+
+        // Event listeners for note editor
+        this.noteTitleInput.element.addEventListener('input', (e) => this.handleNoteUpdate('title', e.target.value));
+        this.noteBodyTextarea.element.addEventListener('input', (e) => this.handleNoteUpdate('body', e.target.value));
+
         this.inputForm.element.addEventListener('submit', e => {
             e.preventDefault();
             this.sendMessage();
@@ -308,28 +326,45 @@ class MainView extends Component {
         this.renderHeader(thought, profiles || {});
         this.inputForm.show(!!identity.sk && thought.type !== 'note');
 
-        // If active thought changes, re-subscribe to messages and trigger a full render
-        if (this.previousThoughtId !== activeThoughtId) {
-            if (this.previousThoughtId) {
-                this.app.dataStore.off(`messages:${this.previousThoughtId}:updated`, this.handleMessagesUpdated);
+        if (thought.type === 'note') {
+            this.messages.show(false);
+            this.noteEditorContainer.show(true);
+            this.noteTitleInput.element.value = thought.name || '';
+            this.noteBodyTextarea.element.value = thought.body || ''; // Use thought.body
+
+            // Clear message rendering queue and rendered IDs for notes, as they don't display traditional messages.
+            this.messageRenderQueue = [];
+            this.renderedMessageIds.clear();
+             // If the messages container had a system message, clear it.
+            if (this.messages.element.firstChild && this.messages.element.firstChild.classList.contains('system')) {
+                this.messages.setContent('');
             }
-            this.app.dataStore.on(`messages:${activeThoughtId}:updated`, this.handleMessagesUpdated);
+        } else {
+            this.messages.show(true);
+            this.noteEditorContainer.show(false);
+            // If active thought changes, re-subscribe to messages and trigger a full render
+            if (this.previousThoughtId !== activeThoughtId) {
+                if (this.previousThoughtId) {
+                    this.app.dataStore.off(`messages:${this.previousThoughtId}:updated`, this.handleMessagesUpdated);
+                }
+                this.app.dataStore.on(`messages:${activeThoughtId}:updated`, this.handleMessagesUpdated);
 
-            // Clear existing messages in DOM and reset tracking for a full re-render
-            this.messages.setContent(''); // Clear DOM
-            this.messageRenderQueue = []; // Clear any pending messages from previous thought
-            this.renderedMessageIds.clear(); // Reset the set of rendered IDs
+                // Clear existing messages in DOM and reset tracking for a full re-render
+                this.messages.setContent(''); // Clear DOM
+                this.messageRenderQueue = []; // Clear any pending messages from previous thought
+                this.renderedMessageIds.clear(); // Reset the set of rendered IDs
 
-            // Manually queue only the latest DISPLAY_MESSAGE_LIMIT messages for the new thought for the initial render
-            const currentMessages = this.app.dataStore.state.messages[activeThoughtId] || [];
-            const initialMessagesToRender = currentMessages.slice(-this.DISPLAY_MESSAGE_LIMIT);
-            this.messageRenderQueue.push(...initialMessagesToRender);
-            initialMessagesToRender.forEach(msg => this.renderedMessageIds.add(msg.id)); // Populate rendered IDs for initial batch
+                // Manually queue only the latest DISPLAY_MESSAGE_LIMIT messages for the new thought for the initial render
+                const currentMessages = this.app.dataStore.state.messages[activeThoughtId] || [];
+                const initialMessagesToRender = currentMessages.slice(-this.DISPLAY_MESSAGE_LIMIT);
+                this.messageRenderQueue.push(...initialMessagesToRender);
+                initialMessagesToRender.forEach(msg => this.renderedMessageIds.add(msg.id)); // Populate rendered IDs for initial batch
 
-            this.scheduleRender(); // Schedule the full render
+                this.scheduleRender(); // Schedule the full render
+            }
+            // If the thought is the same, `queueMessagesForRender` will handle new messages
+            // and `App.selectThought` already clears unread.
         }
-        // If the thought is the same, `queueMessagesForRender` will handle new messages
-        // and `App.selectThought` already clears unread.
 
         this.previousThoughtId = activeThoughtId;
     }
@@ -367,7 +402,10 @@ class MainView extends Component {
         const name = thought.type === 'dm' ? (profiles[thought.pubkey]?.name ?? thought.name) : thought.name;
         this.headerName.setContent(Utils.escapeHtml(name || 'Unknown'));
         this.headerActions.setContent('');
-        if (thought.type === 'group') {
+
+        if (thought.type === 'note') {
+            // No header actions for notes for now
+        } else if (thought.type === 'group') {
             this.headerActions.add(
                 new Button({
                     textContent: 'Info',
@@ -454,6 +492,22 @@ class MainView extends Component {
         this.app.handleAction('send-message', content);
         this.input.element.value = '';
         this.input.element.style.height = '44px';
+    }
+
+    handleNoteUpdate(field, value) {
+        const { activeThoughtId, thoughts } = this.app.dataStore.state;
+        const thought = thoughts[activeThoughtId];
+
+        if (thought && thought.type === 'note') {
+            if (field === 'title') {
+                thought.name = value;
+            } else if (field === 'body') {
+                thought.body = value; // Use thought.body for notes
+            }
+            thought.lastEventTimestamp = Utils.now();
+            this.app.dataStore.saveThoughts(); // Save changes
+            this.app.dataStore.emitStateUpdated(); // Notify other components (like ThoughtList)
+        }
     }
 }
 
@@ -545,6 +599,10 @@ class App {
         });
 
         await this.dataStore.load();
+        if (!this.dataStore.state.identity.sk) {
+            // If no secret key is loaded, immediately show the identity modal.
+            this._showIdentityModal();
+        }
         this.currentPk = this.dataStore.state.identity.pk;
         this.nostr.connect(); // This sets up the continuous subscriptions
 
@@ -595,6 +653,7 @@ class App {
             'join-group': (d) => this.joinGroupThought(d.get('id'), d.get('key'), d.get('name')),
             'add-relay': (d) => this.updateRelays([...this.dataStore.state.relays, d.get('url')]),
             'remove-relay': (url) => this.updateRelays(this.dataStore.state.relays.filter(u => u !== url)),
+            'create-note': () => this.createNoteThought(), // New action for creating notes
         };
         if (actions[action]) actions[action](data);
     }
@@ -907,6 +966,28 @@ class App {
         await this.dataStore.saveThoughts();
         this.selectThought(id);
         this.ui.showToast(`Joined group "${name}".`, 'success');
+    }
+
+    async createNoteThought() {
+        if (!this.dataStore.state.identity.sk) {
+            this.ui.showToast('Login to create notes.', 'error');
+            return;
+        }
+        const newId = crypto.randomUUID();
+        const newNote = {
+            id: newId,
+            name: 'New Note',
+            type: 'note',
+            body: '', // Initialize with an empty body
+            lastEventTimestamp: Utils.now(),
+            unread: 0
+        };
+        this.dataStore.setState(s => {
+            s.thoughts[newId] = newNote;
+        });
+        await this.dataStore.saveThoughts();
+        this.selectThought(newId);
+        this.ui.showToast('Note created.', 'success');
     }
 
     async updateRelays(newRelays) {
