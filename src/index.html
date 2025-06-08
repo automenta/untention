@@ -844,25 +844,26 @@
             }
 
             let filters = [];
-            const historicalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for historical fetch
+            // DIAGNOSTIC: Try a very wide historical period for public feed to see if any events come back.
+            // For DMs/Groups, keep it at 7 days as they are more targeted.
+            const publicHistoricalPeriod = 0; // Unix epoch (all time) for public feed
+            const dmGroupHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for DMs/Groups
 
             if (thought.type === 'public') {
-                filters.push({ kinds: [1], limit: MESSAGE_LIMIT, since: historicalPeriod });
+                filters.push({ kinds: [1], limit: MESSAGE_LIMIT, since: publicHistoricalPeriod });
             } else if (thought.type === 'dm' && identity.pk) {
-                // For DMs, fetch messages between self and the other party
-                filters.push({ kinds: [4], '#p': [thought.pubkey], authors: [identity.pk, thought.pubkey], limit: MESSAGE_LIMIT, since: historicalPeriod });
+                filters.push({ kinds: [4], '#p': [thought.pubkey], authors: [identity.pk, thought.pubkey], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod });
             } else if (thought.type === 'group') {
-                filters.push({ kinds: [41], '#g': [thought.id], limit: MESSAGE_LIMIT, since: historicalPeriod });
+                filters.push({ kinds: [41], '#g': [thought.id], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod });
             } else {
-                return; // No historical fetch for other types or if not logged in for DMs/groups
+                Logger.log(`Skipping historical fetch for unsupported thought type: ${thought.type}`);
+                return;
             }
 
-            Logger.log(`Fetching historical messages for thought ${thought.id} (${thought.type})`);
+            Logger.log(`Attempting to fetch historical messages for thought ${thought.id} (${thought.type}) with filters:`, filters, 'from relays:', relays);
             try {
                 const events = await this.pool.querySync(relays, filters);
                 Logger.log(`Fetched ${events.length} historical events for ${thought.id}`);
-                // Process each fetched event as if it came from a subscription
-                // This will handle decryption, deduplication, and adding to DataStore
                 for (const event of events) {
                     await this.appController.processNostrEvent(event, `historical-${thought.id}`);
                 }
