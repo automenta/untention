@@ -272,6 +272,7 @@ class MainView extends Component {
         this.messageRenderQueue = []; // Queue for messages to be rendered incrementally
         this.renderScheduled = false; // Flag to prevent multiple requestAnimationFrame calls
         this.handleMessagesUpdated = this.queueMessagesForRender.bind(this); // Bind once for consistent listener
+        this.renderedMessageIds = new Set(); // NEW: Keep track of IDs of messages currently in DOM
 
         this.app.dataStore.on('state:updated', s => this.update(s));
     }
@@ -282,7 +283,11 @@ class MainView extends Component {
             this.headerName.setContent('No Thought Selected');
             this.messages.setContent('<div class="message system"><div class="message-content">Select a thought to view messages.</div></div>');
             this.inputForm.show(false);
-            this.previousThoughtId = null; // Reset previous thought ID
+            this.previousThoughtId = null;
+            // Ensure message tracking is reset if no thought is selected
+            this.messageRenderQueue = [];
+            this.renderedMessageIds.clear();
+            this.renderScheduled = false; // Cancel any pending render
             return;
         }
 
@@ -296,9 +301,16 @@ class MainView extends Component {
             }
             this.app.dataStore.on(`messages:${activeThoughtId}:updated`, this.handleMessagesUpdated);
 
-            // Clear existing messages in DOM and queue all current messages for a full render
+            // Clear existing messages in DOM and reset tracking for a full re-render
             this.messages.setContent(''); // Clear DOM
-            this.messageRenderQueue = [...(this.app.dataStore.state.messages[activeThoughtId] || [])]; // Queue all messages
+            this.messageRenderQueue = []; // Clear any pending messages from previous thought
+            this.renderedMessageIds.clear(); // Reset the set of rendered IDs
+
+            // Manually queue all current messages for the new thought for the initial render
+            const currentMessages = this.app.dataStore.state.messages[activeThoughtId] || [];
+            this.messageRenderQueue.push(...currentMessages);
+            currentMessages.forEach(msg => this.renderedMessageIds.add(msg.id)); // Populate rendered IDs for initial batch
+
             this.scheduleRender(); // Schedule the full render
         }
         // If the thought is the same, `queueMessagesForRender` will handle new messages
@@ -312,21 +324,18 @@ class MainView extends Component {
         // It receives the *entire* updated message array for the active thought.
         // We need to determine which messages are new and add them to the queue.
 
-        // Optimization: If the message list is currently empty (e.g., initial load or new thought),
-        // just queue all messages from the updated array.
-        if (this.messages.element.children.length === 0) {
-            this.messageRenderQueue = [...updatedMessagesArray];
-        } else {
-            // Otherwise, find only the new messages that haven't been rendered yet.
-            const currentRenderedMessageIds = new Set(
-                Array.from(this.messages.element.children)
-                    .filter(el => el.classList.contains('message') && el.dataset.id)
-                    .map(el => el.dataset.id)
-            );
-            const messagesToAdd = updatedMessagesArray.filter(msg => !currentRenderedMessageIds.has(msg.id));
-            this.messageRenderQueue.push(...messagesToAdd);
+        const messagesToAdd = [];
+        for (const msg of updatedMessagesArray) {
+            if (!this.renderedMessageIds.has(msg.id)) {
+                messagesToAdd.push(msg);
+                this.renderedMessageIds.add(msg.id); // Add to tracking set as we queue it
+            }
         }
-        this.scheduleRender();
+
+        if (messagesToAdd.length > 0) {
+            this.messageRenderQueue.push(...messagesToAdd);
+            this.scheduleRender();
+        }
     }
 
     scheduleRender() {
@@ -372,20 +381,10 @@ class MainView extends Component {
         const msgsToRender = [...this.messageRenderQueue]; // Take a snapshot of the queue
         this.messageRenderQueue = []; // Clear the queue immediately
 
-        if (!activeThoughtId || !profiles) {
-            // This case should be handled by `update` setting initial content.
-            // If somehow we get here with no active thought, ensure empty state.
-            if (this.messages.element.children.length === 0) {
-                this.messages.add(new Component('div', {
-                    className: 'message system',
-                    innerHTML: `<div class="message-content">Error loading messages.</div>`
-                }));
-            }
-            return;
-        }
-
-        if (msgsToRender.length === 0 && this.messages.element.children.length === 0) {
-            // If no messages to render and nothing currently displayed, show initial empty state
+        // If there are no messages to render and no messages currently displayed, show initial empty state.
+        // This implies that `update` has already cleared the DOM and `renderedMessageIds` if a thought switch occurred.
+        if (msgsToRender.length === 0 && this.renderedMessageIds.size === 0) {
+            this.messages.setContent(''); // Ensure it's truly empty before adding system message
             this.messages.add(new Component('div', {
                 className: 'message system',
                 innerHTML: `<div class="message-content">${activeThoughtId === 'public' ? "Listening to Nostr's global feed..." : 'No messages yet.'}</div>`
@@ -393,12 +392,15 @@ class MainView extends Component {
             return;
         }
 
+        // Capture scroll state *before* rendering
+        const isScrolledToBottom = this.messages.element.scrollHeight - this.messages.element.clientHeight <= this.messages.element.scrollTop + 1; // Small buffer
+
         // Sort messages in the current batch before rendering to ensure correct order
-        // This is important if messages arrive out of order or if the queue contains messages from a full re-render.
         msgsToRender.sort((a, b) => a.created_at - b.created_at);
 
         msgsToRender.forEach(msg => {
             if (!msg?.pubkey || !msg.created_at) return;
+
             const isSelf = msg.pubkey === identity?.pk;
             const p = profiles?.[msg.pubkey] ?? {name: Utils.shortenPubkey(msg.pubkey)};
             const senderName = isSelf ? 'You' : p.name;
@@ -412,7 +414,8 @@ class MainView extends Component {
         });
 
         // After rendering, ensure the scroll position is at the bottom if new messages were added
-        if (msgsToRender.length > 0) {
+        // ONLY if the user was already at the bottom or if it's the initial load.
+        if (msgsToRender.length > 0 && isScrolledToBottom) {
             this.messages.element.scrollTop = this.messages.element.scrollHeight;
         }
     }
