@@ -321,6 +321,7 @@ class MainView extends Component {
 
     renderMessages({activeThoughtId, messages, identity, profiles} = {}) {
         const msgs = messages?.[activeThoughtId] ?? [];
+        Logger.log(`[MainView] Rendering ${msgs.length} messages for thought: ${activeThoughtId}`); // ADDED LOG
         this.messages.setContent('');
         if (!activeThoughtId || !messages) {
             this.messages.add(new Component('div', {
@@ -542,7 +543,7 @@ class App {
 
     async processNostrEvent(event, subId) {
         try {
-            Logger.log(`[App] Processing Nostr event: kind=${event.kind}, subId=${subId}, id=${event.id}`); // ADDED LOG
+            Logger.log(`[App] Processing Nostr event: kind=${event.kind}, subId=${subId}, id=${event.id}`);
             if (!verifyEvent(event)) {
                 Logger.warn('Invalid event signature:', event);
                 return;
@@ -624,10 +625,14 @@ class App {
             }
 
             // Check for duplicate messages by ID
-            if (msgs.some(m => m.id === msg.id)) return;
+            if (msgs.some(m => m.id === msg.id)) {
+                Logger.log(`[App] Duplicate message skipped for thought ${tId}: ${msg.id.slice(0, 8)}...`); // ADDED LOG
+                return;
+            }
 
             // Add new message
             msgs.push(msg);
+            Logger.log(`[App] Added message ${msg.id.slice(0, 8)}... to thought ${tId}. Total: ${msgs.length}`); // ADDED LOG
 
             // Implement circular buffer: remove oldest message if limit exceeded
             if (msgs.length > MESSAGE_LIMIT) {
