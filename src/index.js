@@ -12,7 +12,16 @@ class DataStore extends EventEmitter {
         super();
         this.state = {
             identity: {sk: null, pk: null, profile: null},
-            relays: ['wss://relay.damus.io', 'wss://relay.nostr.band', 'wss://nos.lol', 'wss://relay.snort.social'],
+            relays: [
+                'wss://relay.damus.io',
+                'wss://nostr.wine',
+                'wss://nos.lol',
+                'wss://relay.snort.social',
+                'wss://eden.nostr.land',
+                'wss://purple.plus',
+                'wss://atlas.nostr.land',
+                'wss://relay.nostr.band'
+            ],
             thoughts: {},
             messages: {},
             profiles: {},
