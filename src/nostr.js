@@ -151,7 +151,7 @@ export class Nostr extends EventEmitter {
 
         let filters = [];
         // Align public feed historical fetch with working feed.html's more conservative query.
-        const publicHistoricalPeriod = Utils.now() - (60 * 60); // Last 1 hour for public feed
+        const publicHistoricalPeriod = Utils.now() - (24 * 60 * 60); // Last 24 hours for public feed (was 1 hour)
         const publicHistoricalLimit = 20; // Limit to 20 events for public feed
         const dmGroupHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for DMs/Groups
 
