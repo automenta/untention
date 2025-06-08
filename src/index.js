@@ -3,7 +3,10 @@ import {EventEmitter, Logger, Utils} from "./utils.js";
 import {Button, Component} from "./ui.js";
 import {Nostr} from "./nostr.js";
 
-const {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04, SimplePool} = NostrTools;
+// Changed import from global NostrTools to direct module import
+import {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04, SimplePool} from 'nostr-tools';
+// Added import for localforage
+import localforage from 'localforage';
 
 const MESSAGE_LIMIT = 100; // Max messages to keep per thought
 
@@ -321,7 +324,7 @@ class MainView extends Component {
 
     renderMessages({activeThoughtId, messages, identity, profiles} = {}) {
         const msgs = messages?.[activeThoughtId] ?? [];
-        Logger.log(`[MainView] Rendering ${msgs.length} messages for thought: ${activeThoughtId}`); // ADDED LOG
+        // Logger.log(`[MainView] Rendering ${msgs.length} messages for thought: ${activeThoughtId}`); // Removed diagnostic log
         this.messages.setContent('');
         if (!activeThoughtId || !messages) {
             this.messages.add(new Component('div', {
@@ -422,8 +425,7 @@ class App {
             this.ui.showToast(`Error: ${e.reason.message || 'Unknown error'}`, 'error');
         });
 
-        // NEW LOG: Verify NostrTools object
-        Logger.log('NostrTools object:', NostrTools);
+        // Removed diagnostic log: Logger.log('NostrTools object:', NostrTools);
     }
 
     async init() {

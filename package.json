@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "nostr-tools": "^2.1.0",
+    "localforage": "^1.10.0"
   }
 }
