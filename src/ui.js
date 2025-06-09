@@ -1,9 +1,5 @@
-// --- DYNAMIC UI COMPONENT LIBRARY ---
-import {EventEmitter} from "./utils.js";
-
-export class Component extends EventEmitter {
+export class Component {
     constructor(tag, {id, className, ...props} = {}) {
-        super();
         this.element = document.createElement(tag);
         if (id) this.element.id = id;
         if (className) this.element.className = className;

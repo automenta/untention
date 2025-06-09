@@ -2,15 +2,18 @@ const {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04
 
 import {EventEmitter, Logger, Utils} from "./utils.js";
 
+const MESSAGE_LIMIT = 100; // Max messages to keep per thought (moved from index.js)
+
 export class Nostr extends EventEmitter {
-    constructor(dataStore) {
+    constructor(dataStore, uiController) {
         super();
         this.dataStore = dataStore;
+        this.ui = uiController; // Added uiController
         this.pool = new SimplePool();
         this.subs = new Map();
         this.seenEventIds = new Set();
         this.connectionStatus = 'disconnected';
-        this.appController = null; // Will be set by AppController
+        // Removed: this.appController = null;
     }
 
     connect() {
@@ -82,12 +85,7 @@ export class Nostr extends EventEmitter {
 
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
-                // THIS IS THE CRITICAL NEW LOG: It will fire for ANY event received by SimplePool for this sub.
-                //Logger.log(`[Nostr] === Event received by SimplePool for sub '${id}' ===`, event);
-
-                //Logger.log(`[Nostr] Raw event received for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`);
                 if (this.seenEventIds.has(event.id)) {
-                    //Logger.log(`[Nostr] Event ${event.id.slice(0, 8)}... for sub '${id}' skipped (already seen).`);
                     return;
                 }
                 this.seenEventIds.add(event.id);
@@ -95,9 +93,10 @@ export class Nostr extends EventEmitter {
                     const tempArray = Array.from(this.seenEventIds);
                     this.seenEventIds = new Set(tempArray.slice(tempArray.length - 1500));
                 }
-                this.emit('event', {event, subId: id});
+                // Directly call processNostrEvent instead of emitting
+                this.processNostrEvent(event, id);
             },
-            oneose: () => Logger.log(`[EOSE] for sub '${id}'`),
+            oneose: () => {}, // Removed Logger.log(`[EOSE] for sub '${id}'`)
             onclose: (reason) => Logger.warn(`Subscription ${id} closed: ${reason}`),
         });
         this.subs.set(id, sub);
@@ -166,8 +165,9 @@ export class Nostr extends EventEmitter {
      */
     async fetchHistoricalMessages(thought) {
         const {identity, relays} = this.dataStore.state;
-        if (relays.length === 0 || !thought || !this.appController) {
-            Logger.warn('Cannot fetch historical messages: Missing relays, thought, or appController reference.');
+        // Removed !this.appController from the condition
+        if (relays.length === 0 || !thought) {
+            Logger.warn('Cannot fetch historical messages: Missing relays or thought.');
             return;
         }
 
@@ -194,12 +194,11 @@ export class Nostr extends EventEmitter {
             return;
         }
 
-        //Logger.log(`Attempting to fetch historical messages for thought ${thought.id} (${thought.type}) with filters:`, filters, 'from relays:', relays);
         try {
             const events = await this.pool.querySync(relays, filters);
-            //Logger.log(`Fetched ${events.length} historical events for ${thought.id}. First event (if any):`, events[0]);
             for (const event of events) {
-                await this.appController.processNostrEvent(event, `historical-${thought.id}`);
+                // Call own processNostrEvent
+                await this.processNostrEvent(event, `historical-${thought.id}`);
             }
         } catch (e) {
             Logger.error(`Failed to fetch historical messages for ${thought.id}:`, e);
@@ -216,13 +215,158 @@ export class Nostr extends EventEmitter {
         try {
             const event = await this.pool.get(relays, {kinds: [0], authors: [pubkey]});
             if (event) {
-                this.emit('event', {event}); // Process the fetched profile event
+                // Call own processNostrEvent with a specific subId for profile fetches
+                await this.processNostrEvent(event, 'profile-fetch');
             }
         } catch (e) {
             Logger.warn(`Profile fetch failed for ${pubkey}:`, e);
         } finally {
             fetchingProfiles.delete(pubkey);
             this.dataStore.emitStateUpdated(); // Changed to debounced emitter
+        }
+    }
+
+    // --- Methods moved from App class ---
+    async processNostrEvent(event, subId) {
+        try {
+            if (!verifyEvent(event)) { // verifyEvent is from global NostrTools
+                Logger.warn('Invalid event signature:', event);
+                return;
+            }
+
+            let thoughtId, content = event.content;
+
+            switch (event.kind) {
+                case 0: // Profile metadata
+                    return await this.processKind0(event);
+
+                case 1: // Public text note
+                    if (subId === 'public' || subId.startsWith('historical-public')) {
+                        thoughtId = 'public';
+                    } else if (subId === 'profile-fetch') { // Kind 0 from fetchProfile might be re-processed if not handled carefully
+                        // This case might be redundant if processKind0 handles everything from profile fetches.
+                        // However, if processKind0 is only for kind 0 events, this is fine.
+                        // For now, let's assume profile-fetch events are handled by their kind.
+                        return;
+                    }
+                    else {
+                        return;
+                    }
+                    break;
+
+                case 4: // Encrypted Direct Message
+                    const other = event.pubkey === this.dataStore.state.identity.pk ? Utils.findTag(event, 'p') : event.pubkey;
+                    if (!other) return;
+                    thoughtId = other;
+                    try {
+                        if (!this.dataStore.state.identity.sk) {
+                            Logger.warn(`Cannot decrypt DM, identity not loaded. Event ID: ${event.id}`);
+                            return;
+                        }
+                        content = await nip04.decrypt(this.dataStore.state.identity.sk, other, event.content); // nip04 from global
+                        if (!this.dataStore.state.thoughts[thoughtId]) {
+                            this.dataStore.setState(s => s.thoughts[thoughtId] = {
+                                id: thoughtId, name: Utils.shortenPubkey(thoughtId), type: 'dm',
+                                pubkey: thoughtId, unread: 0, lastEventTimestamp: Utils.now()
+                            });
+                            await this.dataStore.saveThoughts();
+                            this.fetchProfile(thoughtId); // Call own fetchProfile
+                        }
+                    } catch (e) {
+                        Logger.warn(`Failed to decrypt DM for ${thoughtId}:`, e);
+                        return;
+                    }
+                    break;
+
+                case 41: // Encrypted Group Message
+                    const gTag = Utils.findTag(event, 'g');
+                    if (!gTag) return;
+                    thoughtId = gTag;
+                    const group = this.dataStore.state.thoughts[thoughtId];
+                    if (!group?.secretKey) return;
+                    try {
+                        content = await Utils.crypto.aesDecrypt(event.content, group.secretKey);
+                    } catch (e) {
+                        Logger.warn(`Failed to decrypt group message for ${thoughtId}:`, e);
+                        return;
+                    }
+                    break;
+
+                default:
+                    return;
+            }
+
+            if (thoughtId) {
+                await this.processMessage({...event, content}, thoughtId);
+            }
+        } catch (e) {
+            Logger.error('Error processing Nostr event:', e);
+        }
+    }
+
+    async processMessage(msg, tId) {
+        try {
+            const {messages, activeThoughtId, identity} = this.dataStore.state;
+
+            let msgs = messages[tId];
+            if (!msgs) {
+                msgs = [];
+                messages[tId] = msgs;
+            }
+
+            if (msgs.some(m => m.id === msg.id)) {
+                return;
+            }
+
+            msgs.push(msg);
+
+            if (msgs.length > MESSAGE_LIMIT) { // MESSAGE_LIMIT is now defined in this file
+                msgs.shift();
+            }
+
+            msgs.sort((a, b) => a.created_at - b.created_at);
+
+            const t = this.dataStore.state.thoughts[tId];
+            if (t) {
+                t.lastEventTimestamp = Math.max(t.lastEventTimestamp || 0, msg.created_at);
+                if (tId !== activeThoughtId && msg.pubkey !== identity.pk) {
+                    t.unread = (t.unread || 0) + 1;
+                }
+            }
+
+            if (tId !== 'public') {
+                await this.dataStore.saveMessages(tId);
+            }
+
+            this.dataStore.emit(`messages:${tId}:updated`, msgs);
+            this.dataStore.emitStateUpdated();
+
+            this.fetchProfile(msg.pubkey); // Call own fetchProfile
+        } catch (e) {
+            Logger.error(`Error processing message for ${tId}:`, e);
+        }
+    }
+
+    async processKind0(event) {
+        try {
+            const p = JSON.parse(event.content);
+            const n = {
+                name: p.name || p.display_name || Utils.shortenPubkey(event.pubkey),
+                picture: p.picture,
+                nip05: p.nip05,
+                pubkey: event.pubkey,
+                lastUpdatedAt: event.created_at
+            };
+            const existingProfile = this.dataStore.state.profiles[event.pubkey];
+            if (!existingProfile || n.lastUpdatedAt > (existingProfile.lastUpdatedAt ?? 0)) {
+                this.dataStore.setState(s => {
+                    s.profiles[event.pubkey] = n;
+                    if (n.pubkey === s.identity.pk) s.identity.profile = n;
+                });
+                await this.dataStore.saveProfiles();
+            }
+        } catch (e) {
+            Logger.warn('Error parsing profile event:', e);
         }
     }
 }
