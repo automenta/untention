@@ -202,3 +202,211 @@ test.describe('Sending a Message (Public Feed)', () => {
     await expect(page.locator('#message-list .message.self .message-sender:has-text("You")')).toBeVisible();
   });
 });
+
+test.describe('Joining an Existing Group', () => {
+  const sourceGroupName = 'Source Group For Joining';
+  const joinedGroupName = 'Joined Test Group E2E';
+
+  test.beforeEach(async ({ page }) => {
+    // Create a new identity first
+    await page.locator('#identity-panel button:has-text("Load/Create")').click();
+    await page.locator('.modal-content button:has-text("Load/Gen")').click();
+    await expect(page.locator('.toast:has-text("Identity loaded!")')).toBeVisible();
+    await page.waitForSelector('.toast:has-text("Identity loaded!")', { state: 'hidden' });
+  });
+
+  test('should create a group, extract its details, and then join it', async ({ page }) => {
+    // === Part 1: Create a group and extract its details ===
+
+    // 1. Trigger "Create Group"
+    await page.locator('#identity-panel button:has-text("New Group")').click();
+    await expect(page.locator('.modal-content h3:has-text("Create Group")')).toBeVisible();
+
+    // 2. Input group name and submit
+    await page.locator('.modal-content input[name="name"]').fill(sourceGroupName);
+    await page.locator('.modal-content button:has-text("Create")').click();
+    await expect(page.locator(`.toast:has-text('Group "${sourceGroupName}" created.')`)).toBeVisible();
+    await page.waitForSelector(`.toast:has-text('Group "${sourceGroupName}" created.')`, { state: 'hidden' });
+
+    // 3. Extract details from "Group Info" modal
+    await expect(page.locator('.modal-content h3:has-text("Group Info")')).toBeVisible();
+    const groupId = await page.locator('.modal-content input[name="id"]').inputValue();
+    const groupKey = await page.locator('.modal-content input[name="key"]').inputValue();
+    expect(groupId).toBeTruthy();
+    expect(groupKey).toBeTruthy();
+    await page.locator('.modal-content button:has-text("Close")').click();
+    await expect(page.locator('.modal-content h3:has-text("Group Info")')).not.toBeVisible();
+
+    // 4. Verify source group is in thought list (and active)
+    const sourceGroupThought = page.locator(`#thoughts-list .thought-item.active .thought-name span:has-text("${sourceGroupName}")`);
+    await expect(sourceGroupThought).toBeVisible();
+
+    // === Part 2: Join the group using extracted details ===
+
+    // 5. Trigger "Join Group"
+    await page.locator('#identity-panel button:has-text("Join Group")').click();
+    await expect(page.locator('.modal-content h3:has-text("Join Group")')).toBeVisible();
+
+    // 6. Input extracted details and new local name
+    await page.locator('.modal-content input[name="id"]').fill(groupId);
+    await page.locator('.modal-content input[name="key"]').fill(groupKey);
+    await page.locator('.modal-content input[name="name"]').fill(joinedGroupName); // This name is mandatory for joinGroupThought
+
+    // 7. Click "Join"
+    await page.locator('.modal-content button:has-text("Join")').click();
+
+    // 8. Verify success toast for joining group
+    // From src/index.js joinGroupThought, the toast is `Joined group "${name}".`
+    await expect(page.locator(`.toast:has-text('Joined group "${joinedGroupName}".')`)).toBeVisible();
+    await page.waitForSelector(`.toast:has-text('Joined group "${joinedGroupName}".')`, { state: 'hidden' });
+
+    // 9. Verify newly joined group appears in thought list and is active
+    const joinedGroupThought = page.locator(`#thoughts-list .thought-item.active .thought-name span:has-text("${joinedGroupName}")`);
+    await expect(joinedGroupThought).toBeVisible();
+
+    // 10. Verify main view shows message list for this joined group
+    await expect(page.locator('#note-editor-container')).not.toBeVisible();
+    await expect(page.locator('#message-list-container')).toBeVisible();
+    await expect(page.locator('#message-input-form')).toBeVisible();
+
+    // Optional: Send a message to the joined group to be thorough, though not explicitly in this subtask's steps
+    const groupMessageText = 'Hello from the joined group!';
+    await page.locator('#message-input').fill(groupMessageText);
+    await page.locator('#message-input-form button:has-text("Send")').click();
+    await expect(page.locator('.toast:has-text("Message sent!")')).toBeVisible();
+    await page.waitForSelector('.toast:has-text("Message sent!")', { state: 'hidden' });
+    const sentGroupMessage = page.locator('#message-list .message.self .message-text');
+    await expect(sentGroupMessage).toHaveText(groupMessageText);
+    await expect(page.locator('#message-list .message.self .message-sender:has-text("You")')).toBeVisible();
+  });
+});
+
+test.describe('Group Creation and Sending Message', () => {
+  const testGroupName = 'Test E2E Group';
+
+  test.beforeEach(async ({ page }) => {
+    // Create a new identity first
+    await page.locator('#identity-panel button:has-text("Load/Create")').click();
+    await page.locator('.modal-content button:has-text("Load/Gen")').click();
+    await expect(page.locator('.toast:has-text("Identity loaded!")')).toBeVisible();
+    await page.waitForSelector('.toast:has-text("Identity loaded!")', { state: 'hidden' });
+  });
+
+  test('should create a new group, send a message, and see it in the list', async ({ page }) => {
+    // 1. Trigger "Create Group" functionality
+    await page.locator('#identity-panel button:has-text("New Group")').click();
+
+    // 2. Verify Create Group modal is visible
+    await expect(page.locator('.modal-content h3:has-text("Create Group")')).toBeVisible();
+
+    // 3. Input group name
+    await page.locator('.modal-content input[name="name"]').fill(testGroupName);
+
+    // 4. Submit the modal to create the group
+    await page.locator('.modal-content button:has-text("Create")').click();
+
+    // 5. Verify success toast for group creation
+    await expect(page.locator(`.toast:has-text('Group "${testGroupName}" created.')`)).toBeVisible();
+    await page.waitForSelector(`.toast:has-text('Group "${testGroupName}" created.')`, { state: 'hidden' });
+
+    // EXTRA STEP: Handle the "Group Info" modal that appears after creation
+    // Based on src/index.js createGroupThought, a 'groupInfo' modal is shown.
+    // We need to close it to proceed. Assume it has a "Close" or "Done" button.
+    // Let's check for a generic close button if specific one is not known.
+    // Common modal close patterns: button with text "Close", "Done", or an "x" icon.
+    // From src/ui/modals/group-info-modal.js, the title is "Group Info"
+    // and it has a "Close" button.
+    await expect(page.locator('.modal-content h3:has-text("Group Info")')).toBeVisible(); // Verify Group Info modal
+    await page.locator('.modal-content button:has-text("Close")').click(); // Close Group Info modal
+    await expect(page.locator('.modal-content h3:has-text("Group Info")')).not.toBeVisible(); // Verify it's closed
+
+
+    // 6. Verify new group thought appears in the thoughts list with the specified name and is active
+    const newGroupThought = page.locator(`#thoughts-list .thought-item.active .thought-name span:has-text("${testGroupName}")`);
+    await expect(newGroupThought).toBeVisible();
+
+    // 7. Verify main view shows message list view for this group
+    await expect(page.locator('#note-editor-container')).not.toBeVisible();
+    await expect(page.locator('#message-list-container')).toBeVisible();
+    await expect(page.locator('#message-input-form')).toBeVisible();
+
+    // 8. Type a message into the message input
+    const groupMessageText = 'Hello, this is a Group E2E test message!';
+    await page.locator('#message-input').fill(groupMessageText);
+
+    // 9. Send the message
+    await page.locator('#message-input-form button:has-text("Send")').click();
+
+    // 10. Verify success toast for message sent
+    await expect(page.locator('.toast:has-text("Message sent!")')).toBeVisible();
+    await page.waitForSelector('.toast:has-text("Message sent!")', { state: 'hidden' });
+
+    // 11. Verify sent message appears in the message list
+    const sentGroupMessage = page.locator('#message-list .message.self .message-text');
+    await expect(sentGroupMessage).toHaveText(groupMessageText);
+    await expect(page.locator('#message-list .message.self .message-sender:has-text("You")')).toBeVisible();
+  });
+});
+
+test.describe('Direct Message (DM) Creation and Sending', () => {
+  const testNpub = 'npub10elfcs4fr0l0p8afmanusmljjx6qg3dcwjh5hptsevyawu00x3nhmqux99';
+  // This should be the shortened HEX pubkey, as that's what createDmThought uses for the name
+  const testHexPkShort = '00000070...e73f';
+
+  test.beforeEach(async ({ page }) => {
+    // Create a new identity first
+    await page.locator('#identity-panel button:has-text("Load/Create")').click();
+    await page.locator('.modal-content button:has-text("Load/Gen")').click();
+    await expect(page.locator('.toast:has-text("Identity loaded!")')).toBeVisible();
+    await page.waitForSelector('.toast:has-text("Identity loaded!")', { state: 'hidden' });
+  });
+
+  test('should create a new DM, send a message, and see it in the list', async ({ page }) => {
+    // 1. Trigger "Create DM" functionality
+    // Assuming a button like "New DM" exists in the identity panel or a similar place.
+    // This selector might need adjustment based on actual UI.
+    await page.locator('#identity-panel button:has-text("New DM")').click(); // Placeholder selector
+
+    // 2. Verify Create DM modal is visible
+    await expect(page.locator('.modal-content h3:has-text("New Direct Message")')).toBeVisible();
+
+    // 3. Input a valid Nostr public key
+    await page.locator('.modal-content input[name="pubkey"]').fill(testNpub);
+
+    // 4. Submit the modal
+    await page.locator('.modal-content button:has-text("Start DM")').click();
+
+    // 5. Verify success toast for DM creation
+    // From src/index.js createDmThought, the toast is "DM started."
+    await expect(page.locator('.toast:has-text("DM started.")')).toBeVisible();
+    await page.waitForSelector('.toast:has-text("DM started.")', { state: 'hidden' });
+
+    // 6. Verify new DM thought appears in the thoughts list (name is shortened hex pubkey)
+    // and is active.
+    const newDmThought = page.locator(`#thoughts-list .thought-item.active .thought-name span:has-text("${testHexPkShort}")`);
+    await expect(newDmThought).toBeVisible();
+
+    // 7. Verify main view shows message list for this DM
+    // This usually means the note editor is not visible, and message list + input are.
+    await expect(page.locator('#note-editor-container')).not.toBeVisible();
+    await expect(page.locator('#message-list-container')).toBeVisible(); // Assuming a container for message list and input
+    await expect(page.locator('#message-input-form')).toBeVisible();
+
+
+    // 8. Type a message into the message input
+    const dmMessageText = 'Hello, this is a DM E2E test message!';
+    await page.locator('#message-input').fill(dmMessageText);
+
+    // 9. Send the message
+    await page.locator('#message-input-form button:has-text("Send")').click();
+
+    // 10. Verify success toast for message sent
+    await expect(page.locator('.toast:has-text("Message sent!")')).toBeVisible();
+    await page.waitForSelector('.toast:has-text("Message sent!")', { state: 'hidden' });
+
+    // 11. Verify sent message appears in the message list
+    const sentDmMessage = page.locator('#message-list .message.self .message-text');
+    await expect(sentDmMessage).toHaveText(dmMessageText);
+    await expect(page.locator('#message-list .message.self .message-sender:has-text("You")')).toBeVisible();
+  });
+});

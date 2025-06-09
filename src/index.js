@@ -8,7 +8,7 @@ import { UIController } from './ui-controller.js';
 
 const {generateSecretKey, nip19, nip04 } = NostrTools;
 
-class App {
+export class App {
     constructor() {
         this.dataStore = new Data();
         this.ui = new UIController();
