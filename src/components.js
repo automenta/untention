@@ -1,6 +1,11 @@
 import DOMPurify from 'dompurify';
 import { Component, Button } from './ui.js';
-import { Utils } from './utils.js';
+import { Logger } from '../logger.js'; // Assuming Logger might be used, good practice to include
+// No direct use of EventEmitter in this file's classes, but keeping for potential (though unlikely) module-level use.
+// import { EventEmitter } from '../event-emitter.js';
+import { escapeHtml, createAvatarSvg, getUserColor } from './utils/ui-utils.js';
+import { formatTime, now } from './utils/time-utils.js';
+import { shortenPubkey } from './utils/nostr-utils.js'; // findTag not used here
 
 const { nip19, nip04 } = NostrTools;
 
@@ -47,19 +52,34 @@ export class IdentityPanel extends Component {
         const userInfo = new Component('div', {className: 'user-info'}).add(this.avatar, new Component('div', {className: 'user-details'}).add(this.userName, this.userPubkey));
         const buttonsContainer = new Component('div', {className: 'action-buttons'}).add(...Object.values(this.actionButtons).map(b => b.element));
         this.add(userInfo, buttonsContainer);
-        this.app.dataStore.on('state:updated', ({identity}) => this.update(identity));
+        this.unsubscribeDataStore = this.app.dataStore.on('state:updated', ({identity}) => this.update(identity));
+    }
+
+    destroy() {
+        if (this.unsubscribeDataStore) {
+            this.unsubscribeDataStore();
+            this.unsubscribeDataStore = null;
+        }
+        // Destroy buttons if they have their own event listeners or internal state that needs cleanup
+        // For now, assuming Component.destroy() handles their elements.
+        // Object.values(this.actionButtons).forEach(button => {
+        //     if (button instanceof Component && typeof button.destroy === 'function') {
+        //         button.destroy();
+        //     }
+        // });
+        super.destroy(); // Call base class destroy if it exists and handles element removal
     }
 
     update(identity) {
         const {pk, profile} = identity || {};
         const isLoggedIn = !!pk;
-        const displayName = isLoggedIn ? (profile?.name || Utils.shortenPubkey(pk)) : 'Anonymous';
+        const displayName = isLoggedIn ? (profile?.name || shortenPubkey(pk)) : 'Anonymous'; // Changed
         const pubkeyText = isLoggedIn ? nip19.npubEncode(pk) : 'No identity loaded';
-        const avatarSrc = isLoggedIn ? (profile?.picture || Utils.createAvatarSvg(displayName, pk)) : Utils.createAvatarSvg('?', '#ccc');
+        const avatarSrc = isLoggedIn ? (profile?.picture || createAvatarSvg(displayName, pk)) : createAvatarSvg('?', '#ccc'); // Changed
         this.avatar.element.src = avatarSrc;
-        this.avatar.element.onerror = () => this.avatar.element.src = Utils.createAvatarSvg(displayName, pk);
-        this.userName.setContent(Utils.escapeHtml(displayName));
-        this.userPubkey.setContent(Utils.escapeHtml(pubkeyText));
+        this.avatar.element.onerror = () => this.avatar.element.src = createAvatarSvg(displayName, pk); // Changed
+        this.userName.setContent(escapeHtml(displayName)); // Changed
+        this.userPubkey.setContent(escapeHtml(pubkeyText)); // Changed
         this.actionButtons.identity.setContent(isLoggedIn ? 'Logout' : 'Manage Identity');
         for (const key in this.actionButtons) {
             if (key !== 'identity' && key !== 'relays') {
@@ -104,13 +124,16 @@ class NoteEditorView extends Component {
         const { activeThoughtId, thoughts } = this.dataStore.state;
         const thought = thoughts[activeThoughtId];
 
+        // Ensure we're updating an existing note.
         if (thought && thought.type === 'note') {
             if (field === 'title') {
                 thought.name = value;
             } else if (field === 'body') {
                 thought.body = value;
             }
-            thought.lastEventTimestamp = Utils.now();
+            // Update timestamp to reflect change and save.
+            // This directly modifies and saves data, differing from action-based updates elsewhere.
+            thought.lastEventTimestamp = now(); // Changed
             this.dataStore.saveThoughts();
             this.dataStore.emitStateUpdated(); // Notify other components like ThoughtList
         }
@@ -170,57 +193,62 @@ class MessageListView extends Component {
         const activeThoughtId = this.currentThoughtId; // Use the stored thought ID
 
         const msgsToRender = [...this.messageRenderQueue];
-        this.messageRenderQueue = [];
+        this.messageRenderQueue = []; // Clear queue after copying
 
+        // Handle initial state or empty message list
         if (msgsToRender.length === 0 && this.renderedMessageIds.size === 0 && this.messagesContainer.element.children.length === 0) {
-            this.messagesContainer.setContent(''); // Clear previous
+            this.messagesContainer.setContent(''); // Clear previous, if any
             this.messagesContainer.add(new Component('div', {
-                className: 'message system',
+                className: 'message system', // System message style
                 innerHTML: `<div class="message-content">${activeThoughtId === 'public' ? "Listening to Nostr's global feed..." : 'No messages yet.'}</div>`
             }));
             return;
         }
 
-        // If there's a "No messages yet" placeholder and we have messages to render, clear it.
+        // If a placeholder "No messages yet" exists and we now have messages, clear it.
         if (msgsToRender.length > 0) {
             const firstChild = this.messagesContainer.element.firstChild;
             if (firstChild && firstChild.classList && firstChild.classList.contains('message') && firstChild.classList.contains('system')) {
-                this.messagesContainer.setContent('');
+                this.messagesContainer.setContent(''); // Clear placeholder
             }
         }
 
-
+        // Determine if view is scrolled to bottom before adding new messages
         const isScrolledToBottom = this.messagesContainer.element.scrollHeight - this.messagesContainer.element.clientHeight <= this.messagesContainer.element.scrollTop + 1;
 
-        msgsToRender.sort((a, b) => a.created_at - b.created_at);
+        msgsToRender.sort((a, b) => a.created_at - b.created_at); // Ensure chronological order
 
-        const fragment = document.createDocumentFragment();
+        const fragment = document.createDocumentFragment(); // Use a fragment for efficient batch DOM insertion
 
         msgsToRender.forEach(msg => {
-            if (!msg?.pubkey || !msg.created_at) return;
+            if (!msg?.pubkey || !msg.created_at) return; // Skip invalid messages
 
             const isSelf = msg.pubkey === identity?.pk;
-            const p = profiles?.[msg.pubkey] ?? { name: Utils.shortenPubkey(msg.pubkey) };
+            const p = profiles?.[msg.pubkey] ?? { name: shortenPubkey(msg.pubkey) };
             const senderName = isSelf ? 'You' : p.name;
-            const avatarSrc = p.picture ?? Utils.createAvatarSvg(senderName, msg.pubkey);
+            const avatarSrc = p.picture ?? createAvatarSvg(senderName, msg.pubkey);
+
+            // Create message element
             const msgEl = new Component('div', {
                 className: `message ${isSelf ? 'self' : ''}`,
-                innerHTML: `<div class="message-avatar"><img class="avatar" src="${avatarSrc}" onerror="this.src='${Utils.createAvatarSvg(senderName, msg.pubkey)}'"></div><div class="message-content"><div class="message-header"><div class="message-sender" style="color: ${Utils.getUserColor(msg.pubkey)}">${Utils.escapeHtml(senderName)}</div><div class="message-time">${Utils.formatTime(msg.created_at)}</div></div><div class="message-text">${DOMPurify.sanitize(msg.content || '')}</div></div>`
+                innerHTML: `<div class="message-avatar"><img class="avatar" src="${avatarSrc}" onerror="this.src='${createAvatarSvg(senderName, msg.pubkey)}'"></div><div class="message-content"><div class="message-header"><div class="message-sender" style="color: ${getUserColor(msg.pubkey)}">${escapeHtml(senderName)}</div><div class="message-time">${formatTime(msg.created_at)}</div></div><div class="message-text">${DOMPurify.sanitize(msg.content || '')}</div></div>`
             });
-            msgEl.element.dataset.id = msg.id;
+            msgEl.element.dataset.id = msg.id; // Store ID for potential future reference/updates
             fragment.appendChild(msgEl.element);
         });
 
-        this.messagesContainer.element.appendChild(fragment);
+        this.messagesContainer.element.appendChild(fragment); // Append all new messages at once
 
+        // Maintain message limit by removing oldest messages
         while (this.messagesContainer.element.children.length > this.DISPLAY_MESSAGE_LIMIT) {
             const oldestChild = this.messagesContainer.element.firstElementChild;
             if (oldestChild && oldestChild.dataset.id) {
-                this.renderedMessageIds.delete(oldestChild.dataset.id);
+                this.renderedMessageIds.delete(oldestChild.dataset.id); // Update tracking set
             }
             oldestChild.remove();
         }
 
+        // Auto-scroll to bottom if it was already there
         if (msgsToRender.length > 0 && isScrolledToBottom) {
             this.messagesContainer.element.scrollTop = this.messagesContainer.element.scrollHeight;
         }
@@ -266,11 +294,20 @@ export class ThoughtList extends Component {
     constructor(app) {
         super('div', {id: 'thoughts-list'});
         this.app = app;
-        this.app.dataStore.on('state:updated', s => this.render(s));
+        this.unsubscribeDataStore = this.app.dataStore.on('state:updated', s => this.render(s));
         this.element.addEventListener('click', e => {
             const t = e.target.closest('.thought-item');
             if (t?.dataset.id) this.app.handleAction('select-thought', t.dataset.id);
         });
+    }
+
+    destroy() {
+        if (this.unsubscribeDataStore) {
+            this.unsubscribeDataStore();
+            this.unsubscribeDataStore = null;
+        }
+        // The event listener on this.element will be removed when super.destroy() removes the element.
+        super.destroy();
     }
 
     render({thoughts, profiles, activeThoughtId, identity} = {}) {
@@ -291,7 +328,7 @@ export class ThoughtList extends Component {
             };
             const item = new Component('div', {
                 className: `thought-item ${t.id === activeThoughtId ? 'active' : ''}`,
-                innerHTML: `<div class="thought-icon">${icons[t.type] ?? '❓'}</div> <div class="thought-details"> <div class="thought-name"><span>${Utils.escapeHtml(name || 'Unknown')}</span>${t.unread > 0 ? `<span class="thought-unread">${t.unread}</span>` : ''}</div> <div class="thought-meta">${Utils.escapeHtml(metas[t.type] ?? '')}</div></div>`
+                innerHTML: `<div class="thought-icon">${icons[t.type] ?? '❓'}</div> <div class="thought-details"> <div class="thought-name"><span>${escapeHtml(name || 'Unknown')}</span>${t.unread > 0 ? `<span class="thought-unread">${t.unread}</span>` : ''}</div> <div class="thought-meta">${escapeHtml(metas[t.type] ?? '')}</div></div>` // Changed
             });
             item.element.dataset.id = t.id;
             this.add(item);
@@ -340,7 +377,22 @@ export class MainView extends Component {
             }
         });
 
-        this.app.dataStore.on('state:updated', s => this.update(s));
+        this.unsubscribeDataStore = this.app.dataStore.on('state:updated', s => this.update(s));
+    }
+
+    destroy() {
+        if (this.unsubscribeDataStore) {
+            this.unsubscribeDataStore();
+            this.unsubscribeDataStore = null;
+        }
+        // Destroy managed sub-components
+        this.noThoughtSelectedView.destroy();
+        this.noteEditorView.destroy();
+        this.messageListView.destroy(); // This one already has a good destroy method
+        this.inputForm.destroy(); // If Component base class has destroy
+        this.header.destroy(); // If Component base class has destroy
+
+        super.destroy();
     }
 
     update({activeThoughtId, thoughts, profiles, identity} = {}) {
@@ -379,7 +431,7 @@ export class MainView extends Component {
 
     renderHeader(thought, profiles) {
         const name = thought.type === 'dm' ? (profiles[thought.pubkey]?.name ?? thought.name) : thought.name;
-        this.headerName.setContent(Utils.escapeHtml(name || 'Unknown'));
+        this.headerName.setContent(escapeHtml(name || 'Unknown')); // Changed
         this.headerActions.setContent(''); // Clear previous actions
 
         if (thought.type === 'group') {

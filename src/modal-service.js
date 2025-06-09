@@ -6,8 +6,7 @@ import { JoinGroupModal } from './ui/modals/join-group-modal.js';
 import { CreateDmModal } from './ui/modals/create-dm-modal.js';
 import { GroupInfoModal } from './ui/modals/group-info-modal.js';
 import { RelaysModal } from './ui/modals/relays-modal.js';
-// Logger might be needed if we use it instead of console.warn
-// import { Logger } from "./utils.js";
+import { Logger } from '../logger.js'; // Adjusted path
 
 
 export class ModalService {
@@ -66,7 +65,7 @@ export class ModalService {
                     if (activeGroup && activeGroup.type === 'group') {
                         modalInstance = new GroupInfoModal(this.app, activeGroup);
                     } else {
-                        console.error("ModalService: GroupInfo modal called without group data or active group.");
+                        Logger.error("ModalService: GroupInfo modal called without group data or active group.");
                         this.app.ui.showToast("Cannot show group info: no group selected or data missing.", "error");
                         return;
                     }
@@ -80,8 +79,7 @@ export class ModalService {
                 modalInstance = new RelaysModal(this.app, relaysList);
                 break;
             default:
-                console.warn(`ModalService: Unknown modal type requested: ${modalName}`);
-                // Logger.warn(`Unknown modal type: ${modalName}`);
+                Logger.warn(`ModalService: Unknown modal type requested: ${modalName}`);
                 return;
         }
 

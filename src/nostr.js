@@ -1,8 +1,26 @@
 const {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04, SimplePool} = NostrTools;
 
-import {EventEmitter, Logger, Utils} from "./utils.js";
+import { EventEmitter } from './event-emitter.js';
+import { Logger } from './logger.js';
+import { now } from './utils/time-utils.js';
+import { findTag, shortenPubkey } from './utils/nostr-utils.js';
+import { aesDecrypt } from './utils/crypto-utils.js';
 
-const MESSAGE_LIMIT = 100;
+// Nostr Event Kinds
+const PROFILE_KIND = 0;
+const TEXT_NOTE_KIND = 1;
+const ENCRYPTED_DM_KIND = 4;
+const GROUP_CHAT_KIND = 41; // Custom kind for encrypted group chat
+
+// Time Constants
+const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
+
+// Cache behavior constants
+const SEEN_EVENT_IDS_MAX_SIZE = 2000;
+const SEEN_EVENT_IDS_TRIM_THRESHOLD = 1500; // Number of items to keep after trim
+
+const MESSAGE_LIMIT = 100; // Max messages to fetch/store per thought (already a constant, good)
+
 
 export class Nostr extends EventEmitter {
     constructor(dataStore, uiController) {
@@ -78,16 +96,17 @@ export class Nostr extends EventEmitter {
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
                 if (this.seenEventIds.has(event.id)) {
-                    return;
+                    return; // Already processed this event
                 }
                 this.seenEventIds.add(event.id);
-                if (this.seenEventIds.size > 2000) {
+                // Prune the seenEventIds set to prevent unbounded growth
+                if (this.seenEventIds.size > SEEN_EVENT_IDS_MAX_SIZE) {
                     const tempArray = Array.from(this.seenEventIds);
-                    this.seenEventIds = new Set(tempArray.slice(tempArray.length - 1500));
+                    this.seenEventIds = new Set(tempArray.slice(tempArray.length - SEEN_EVENT_IDS_TRIM_THRESHOLD));
                 }
                 this.processNostrEvent(event, id);
             },
-            oneose: () => {},
+            oneose: () => {}, // End of stored events marker
             onclose: (reason) => Logger.warn(`Subscription ${id} closed: ${reason}`),
         });
         this.subs.set(id, sub);
@@ -122,26 +141,30 @@ export class Nostr extends EventEmitter {
     }
 
     subscribeToCoreEvents() {
-        this.subscribe('public', [{kinds: [1]}], { onevent(event) {} });
+        // Subscribe to public text notes
+        this.subscribe('public', [{kinds: [TEXT_NOTE_KIND]}], { onevent(event) {} });
         const {identity} = this.dataStore.state;
         if (identity.pk) {
-            const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60);
-            this.subscribe('dms', [{kinds: [4], '#p': [identity.pk], since: sevenDaysAgo}]);
-            this.subscribe('profile', [{kinds: [0], authors: [identity.pk], limit: 1}]);
-            this.resubscribeToGroups();
+            const sevenDaysAgo = now() - SEVEN_DAYS_IN_SECONDS;
+            // Subscribe to DMs addressed to the user
+            this.subscribe('dms', [{kinds: [ENCRYPTED_DM_KIND], '#p': [identity.pk], since: sevenDaysAgo}]);
+            // Subscribe to user's own profile updates
+            this.subscribe('profile', [{kinds: [PROFILE_KIND], authors: [identity.pk], limit: 1}]);
+            this.resubscribeToGroups(); // Resubscribe to any group chats
         }
     }
 
     resubscribeToGroups() {
         const gids = Object.values(this.dataStore.state.thoughts).filter(c => c.type === 'group').map(c => c.id);
         if (gids.length > 0) {
-            const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60);
+            const sevenDaysAgo = now() - SEVEN_DAYS_IN_SECONDS;
             this.subscribe('groups', [{
-                kinds: [41],
+                kinds: [GROUP_CHAT_KIND], // Use constant for group chat kind
                 '#g': gids,
                 since: sevenDaysAgo
             }]);
         } else {
+            // If no groups, ensure any existing group subscription is closed
             this.subs.get('groups')?.unsub();
         }
     }
@@ -154,24 +177,25 @@ export class Nostr extends EventEmitter {
         }
 
         let filters = [];
-        const publicHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60);
-        const publicHistoricalLimit = 20;
-        const dmGroupHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60);
+        const publicHistoricalPeriod = now() - SEVEN_DAYS_IN_SECONDS;
+        const publicHistoricalLimit = 20; // Specific limit for public feed history
+        const dmGroupHistoricalPeriod = now() - SEVEN_DAYS_IN_SECONDS;
 
         if (thought.type === 'public') {
-            filters.push({kinds: [1], limit: publicHistoricalLimit, since: publicHistoricalPeriod});
+            filters.push({kinds: [TEXT_NOTE_KIND], limit: publicHistoricalLimit, since: publicHistoricalPeriod});
         } else if (thought.type === 'dm' && identity.pk) {
             filters.push({
-                kinds: [4],
+                kinds: [ENCRYPTED_DM_KIND],
                 '#p': [thought.pubkey],
-                authors: [identity.pk, thought.pubkey],
+                authors: [identity.pk, thought.pubkey], // Fetch DMs sent by user or to user from the other party
                 limit: MESSAGE_LIMIT,
                 since: dmGroupHistoricalPeriod
             });
         } else if (thought.type === 'group') {
-            filters.push({kinds: [41], '#g': [thought.id], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod});
+            filters.push({kinds: [GROUP_CHAT_KIND], '#g': [thought.id], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod});
         } else {
-            Logger.log(`Skipping historical fetch for unsupported thought type: ${thought.type}`);
+            // Notes are local and don't need historical fetching from relays
+            Logger.log(`Skipping historical fetch for unsupported or local thought type: ${thought.type}`);
             return;
         }
 
@@ -193,7 +217,7 @@ export class Nostr extends EventEmitter {
         this.dataStore.emitStateUpdated();
 
         try {
-            const event = await this.pool.get(relays, {kinds: [0], authors: [pubkey]});
+            const event = await this.pool.get(relays, {kinds: [PROFILE_KIND], authors: [pubkey]}); // Use constant
             if (event) {
                 await this.processNostrEvent(event, 'profile-fetch');
             }
@@ -215,57 +239,59 @@ export class Nostr extends EventEmitter {
             let thoughtId, content = event.content;
 
             switch (event.kind) {
-                case 0:
+                case PROFILE_KIND: // Kind 0: Profile metadata
                     return await this.processKind0(event);
-                case 1:
+                case TEXT_NOTE_KIND: // Kind 1: Public text note
                     if (subId === 'public' || subId.startsWith('historical-public')) {
-                        thoughtId = 'public';
+                        thoughtId = 'public'; // Assign to the main public feed
                     } else {
+                        // If it's from another subscription, ignore for now, or handle if it's a mention, etc.
                         return;
                     }
                     break;
-                case 4:
-                    const otherPubkey = event.pubkey === this.dataStore.state.identity.pk ? Utils.findTag(event, 'p') : event.pubkey;
-                    if (!otherPubkey) return;
-                    thoughtId = otherPubkey;
+                case ENCRYPTED_DM_KIND: // Kind 4: Encrypted Direct Message
+                    const otherPubkey = event.pubkey === this.dataStore.state.identity.pk ? findTag(event, 'p') : event.pubkey;
+                    if (!otherPubkey) return; // DM must have a peer pubkey
+                    thoughtId = otherPubkey; // Thought ID for DMs is the other user's pubkey
                     try {
                         if (!this.dataStore.state.identity.sk) {
                             Logger.warn(`Cannot decrypt DM: Secret key (sk) not available. Event ID: ${event.id}`);
                             return;
                         }
                         content = await nip04.decrypt(this.dataStore.state.identity.sk, otherPubkey, event.content);
+                        // If this DM is from a new contact, create a thought for them
                         if (!this.dataStore.state.thoughts[thoughtId]) {
                             this.dataStore.setState(s => s.thoughts[thoughtId] = {
-                                id: thoughtId, name: Utils.shortenPubkey(thoughtId), type: 'dm',
-                                pubkey: thoughtId, unread: 0, lastEventTimestamp: Utils.now()
+                                id: thoughtId, name: shortenPubkey(thoughtId), type: 'dm',
+                                pubkey: thoughtId, unread: 0, lastEventTimestamp: now()
                             });
                             await this.dataStore.saveThoughts();
-                            this.fetchProfile(thoughtId);
+                            this.fetchProfile(thoughtId); // Fetch profile for new DM contact
                         }
                     } catch (err) {
                         Logger.warn(`Failed to decrypt DM for ${thoughtId}: ${err.message}. Event ID: ${event.id}`);
-                        return;
+                        return; // Skip processing if decryption fails
                     }
                     break;
-                case 41:
-                    const groupTag = Utils.findTag(event, 'g');
-                    if (!groupTag) return;
+                case GROUP_CHAT_KIND: // Kind 41: Custom Group Chat Message
+                    const groupTag = findTag(event, 'g'); // 'g' tag indicates the group ID
+                    if (!groupTag) return; // Group message must have a group ID
                     thoughtId = groupTag;
                     const group = this.dataStore.state.thoughts[thoughtId];
                     if (!group?.secretKey) {
                         Logger.warn(`No secret key for group ${thoughtId}. Cannot decrypt. Event ID: ${event.id}`);
-                        return;
+                        return; // Cannot decrypt without the group's secret key
                     }
                     try {
-                        content = await Utils.crypto.aesDecrypt(event.content, group.secretKey);
+                        content = await aesDecrypt(event.content, group.secretKey);
                     } catch (err) {
                         Logger.warn(`Failed to decrypt group message for ${thoughtId}: ${err.message}. Event ID: ${event.id}`);
-                        return;
+                        return; // Skip processing if decryption fails
                     }
                     break;
                 default:
-                    Logger.log(`Received unhandled event kind: ${event.kind}`);
-                    return;
+                    Logger.log(`Received unhandled event kind: ${event.kind}, ID: ${event.id}`);
+                    return; // Ignore unknown event kinds
             }
 
             if (thoughtId && content !== undefined) {
@@ -325,7 +351,7 @@ export class Nostr extends EventEmitter {
         try {
             const profileContent = JSON.parse(event.content);
             const newProfile = {
-                name: profileContent.name || profileContent.display_name || Utils.shortenPubkey(event.pubkey),
+                name: profileContent.name || profileContent.display_name || shortenPubkey(event.pubkey),
                 picture: profileContent.picture,
                 nip05: profileContent.nip05,
                 pubkey: event.pubkey,

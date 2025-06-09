@@ -1,5 +1,16 @@
 import { Component, Button } from './ui.js';
-import { Utils } from './utils.js';
+// Utils file is no longer directly used here after its disassembly.
+// Specific utilities would be imported if needed. For now, none are.
+
+// Constants for Toast display
+const DEFAULT_TOAST_DURATION = 3000;
+const EMOJI_INFO = 'ℹ️';
+const EMOJI_SUCCESS = '✅';
+const EMOJI_WARN = '⚠️';
+const EMOJI_ERROR = '❌';
+
+// Constant for Loading Indicator
+const LOADING_EMOJI = '⏳';
 
 export class UIController {
     constructor() {
@@ -33,14 +44,14 @@ export class UIController {
         this.modal.element.classList.remove('visible');
     }
 
-    showToast(message, type = 'info', duration = 3000) {
+    showToast(message, type = 'info', duration = DEFAULT_TOAST_DURATION) {
         const emojiMap = {
-            info: 'ℹ️',
-            success: '✅',
-            warn: '⚠️',
-            error: '❌',
+            info: EMOJI_INFO,
+            success: EMOJI_SUCCESS,
+            warn: EMOJI_WARN,
+            error: EMOJI_ERROR,
         };
-        const selectedEmoji = emojiMap[type] || emojiMap.info;
+        const selectedEmoji = emojiMap[type] || EMOJI_INFO; // Default to info emoji
         const fullMessage = `${selectedEmoji} ${message}`;
 
         const toast = new Component('div', {className: 'toast', textContent: fullMessage});
@@ -57,8 +68,7 @@ export class UIController {
     setLoading(isLoading) {
         document.getElementById('loading-indicator')?.remove();
         if (isLoading) {
-            const loadingEmoji = '⏳';
-            document.body.insertAdjacentHTML('beforeend', `<div id="loading-indicator">${loadingEmoji} Loading...</div>`);
+            document.body.insertAdjacentHTML('beforeend', `<div id="loading-indicator">${LOADING_EMOJI} Loading...</div>`);
         }
     }
 }

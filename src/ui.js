@@ -1,3 +1,6 @@
+import { escapeHtml } from './utils/ui-utils.js'; // For potential future use
+import { Logger } from './logger.js'; // For potential future use
+
 export class Component {
     constructor(tag, {id, className, ...props} = {}) {
         this.element = document.createElement(tag);
