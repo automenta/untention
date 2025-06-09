@@ -1,8 +1,8 @@
 export const Utils = {
     now: () => Math.floor(Date.now() / 1000),
-    bytesToHex: b => Array.from(b, byte => byte.toString(16).padStart(2, '0')).join(''),
-    hexToBytes: h => new Uint8Array(h.match(/.{1,2}/g).map(b => parseInt(b, 16))),
-    uint8ArrayToBase64: a => btoa(String.fromCharCode(...a)),
+    bytesToHex: bytes => bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), ''),
+    hexToBytes: hex => new Uint8Array(hex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []),
+    uint8ArrayToBase64: arr => btoa(String.fromCharCode(...arr)),
     base64ToUint8Array: s => new Uint8Array(atob(s).split("").map(c => c.charCodeAt(0))),
     shortenPubkey: p => p ? `${p.slice(0, 8)}...${p.slice(-4)}` : '?',
     formatTime: t => new Date(t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
@@ -21,32 +21,34 @@ export const Utils = {
         const c = ['#4dabf7', '#20c997', '#f06595', '#cc5de8', '#5c7cfa', '#fcc419', '#ff8787', '#74b816'];
         return c[p ? Array.from(p).reduce((acc, char) => acc + char.charCodeAt(0), 0) % c.length : 0];
     },
-    createAvatarSvg(t, s) {
-        const i = (t?.charAt(0) || '?').toUpperCase(), o = this.getUserColor(s);
-        return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${this.escapeHtml(o)}"/><text x="50%" y="50%" font-size="50" dominant-baseline="central" text-anchor="middle" fill="white" font-family="system-ui, sans-serif">${this.escapeHtml(i)}</text></svg>`)}`;
+    createAvatarSvg(text, seed) {
+        const initial = (text?.charAt(0) || '?').toUpperCase(), color = Utils.getUserColor(seed);
+        return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${Utils.escapeHtml(color)}"/><text x="50%" y="50%" font-size="50" dominant-baseline="central" text-anchor="middle" fill="white" font-family="system-ui, sans-serif">${Utils.escapeHtml(initial)}</text></svg>`)}`;
     },
     crypto: {
-        aesEncrypt: async (t, k) => {
-            const e = await Utils.crypto.importKeyFromBase64(k), n = crypto.getRandomValues(new Uint8Array(12)),
-                c = await crypto.subtle.encrypt({name: "AES-GCM", iv: n}, e, new TextEncoder().encode(t));
-            return `${Utils.uint8ArrayToBase64(n)}:${Utils.uint8ArrayToBase64(new Uint8Array(c))}`;
+        aesEncrypt: async (plainText, keyBase64) => {
+            const key = await Utils.crypto.importKeyFromBase64(keyBase64);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const cipherText = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, key, new TextEncoder().encode(plainText));
+            return `${Utils.uint8ArrayToBase64(iv)}:${Utils.uint8ArrayToBase64(new Uint8Array(cipherText))}`;
         },
-        aesDecrypt: async (t, k) => {
+        aesDecrypt: async (encryptedData, keyBase64) => {
             try {
-                const e = await Utils.crypto.importKeyFromBase64(k), [n, c] = t.split(':');
-                if (!n || !c) throw new Error('Invalid encrypted data');
-                const r = await crypto.subtle.decrypt({
+                const key = await Utils.crypto.importKeyFromBase64(keyBase64);
+                const [ivBase64, cipherTextBase64] = encryptedData.split(':');
+                if (!ivBase64 || !cipherTextBase64) throw new Error('Invalid encrypted data format');
+                const plainText = await crypto.subtle.decrypt({
                     name: "AES-GCM",
-                    iv: Utils.base64ToUint8Array(n)
-                }, e, Utils.base64ToUint8Array(c));
-                return new TextDecoder().decode(r);
-            } catch (e) {
-                Logger.error('AES decryption failed:', e);
-                throw e;
+                    iv: Utils.base64ToUint8Array(ivBase64)
+                }, key, Utils.base64ToUint8Array(cipherTextBase64));
+                return new TextDecoder().decode(plainText);
+            } catch (err) {
+                Logger.error('AES decryption failed:', err);
+                throw err;
             }
         },
-        exportKeyAsBase64: async k => Utils.uint8ArrayToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", k))),
-        importKeyFromBase64: k => crypto.subtle.importKey("raw", Utils.base64ToUint8Array(k), {name: "AES-GCM"}, !0, ["encrypt", "decrypt"])
+        exportKeyAsBase64: async key => Utils.uint8ArrayToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", key))),
+        importKeyFromBase64: keyBase64 => crypto.subtle.importKey("raw", Utils.base64ToUint8Array(keyBase64), {name: "AES-GCM"}, true, ["encrypt", "decrypt"])
     },
     validateRelayUrl: url => {
         try {
@@ -60,7 +62,7 @@ export const Utils = {
 
 export const Logger = {
     log: (...a) => console.log('[N]', ...a),
-        warn: (...a) => console.warn('[N]', ...a),
+    warn: (...a) => console.warn('[N]', ...a),
     error: (...a) => console.error('[N]', ...a)
 };
 

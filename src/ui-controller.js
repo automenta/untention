@@ -1,5 +1,5 @@
-import { Component, Button } from './ui.js'; // Added Button based on usage in _showRelaysModal and App's modal methods
-import { Utils } from './utils.js'; // Utils is used by _showRelaysModal
+import { Component, Button } from './ui.js';
+import { Utils } from './utils.js';
 
 export class UIController {
     constructor() {
@@ -17,9 +17,15 @@ export class UIController {
     }
 
     showModal({title, body, buttons}) {
-        const content = this.modal.element.querySelector('.modal-content');
-        content.innerHTML = '';
-        content.append(new Component('h3', {textContent: title}).element, body.element || body, new Component('div', {className: 'modal-buttons'}).add(...buttons.map(b => b.element)).element);
+        const modalContent = this.modal.element.querySelector('.modal-content');
+        modalContent.innerHTML = ''; // Clear previous content
+
+        const titleElement = new Component('h3', {textContent: title}).element;
+        const bodyElement = body.element || body; // body could be a Component or a DOM element
+        const buttonsContainer = new Component('div', {className: 'modal-buttons'});
+        buttons.forEach(button => buttonsContainer.add(button)); // Assuming Button extends Component
+
+        modalContent.append(titleElement, bodyElement, buttonsContainer.element);
         this.modal.element.classList.add('visible');
     }
 
@@ -28,22 +34,21 @@ export class UIController {
     }
 
     showToast(message, type = 'info', duration = 3000) {
-        const t = new Component('div', {className: 'toast', textContent: message});
-        t.element.style.background = `var(--${{
-            error: 'danger',
-            success: 'success',
-            warn: 'warning'
-        }[type] ?? 'header-bg'})`;
-        this.toastContainer.add(t);
-        setTimeout(() => t.element.classList.add('visible'), 10);
+        const toast = new Component('div', {className: 'toast', textContent: message});
+        const toastTypeClass = {error: 'danger', success: 'success', warn: 'warning'}[type] || 'info';
+        toast.element.style.background = `var(--${toastTypeClass === 'info' ? 'header-bg' : toastTypeClass})`;
+        this.toastContainer.add(toast);
+        setTimeout(() => toast.element.classList.add('visible'), 10);
         setTimeout(() => {
-            t.element.classList.remove('visible');
-            setTimeout(() => t.destroy(), 300);
+            toast.element.classList.remove('visible');
+            setTimeout(() => toast.destroy(), 300);
         }, duration);
     }
 
     setLoading(isLoading) {
         document.getElementById('loading-indicator')?.remove();
-        if (isLoading) document.body.insertAdjacentHTML('beforeend', '<div id="loading-indicator">Loading...</div>');
+        if (isLoading) {
+            document.body.insertAdjacentHTML('beforeend', '<div id="loading-indicator">Loading...</div>');
+        }
     }
 }

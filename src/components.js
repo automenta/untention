@@ -1,8 +1,7 @@
 import { Component, Button } from './ui.js';
 import { Utils } from './utils.js';
-// NostrTools will be available globally via script tag in index.html
-// So, nip19 and nip04 (used in MainView) should be available.
-const { nip19, nip04 } = NostrTools; // Assuming NostrTools is global
+
+const { nip19, nip04 } = NostrTools;
 
 export class IdentityPanel extends Component {
     constructor(app) {
@@ -61,9 +60,11 @@ export class IdentityPanel extends Component {
         this.userName.setContent(Utils.escapeHtml(displayName));
         this.userPubkey.setContent(Utils.escapeHtml(pubkeyText));
         this.actionButtons.identity.setContent(isLoggedIn ? 'Logout' : 'Load/Create');
-        Object.values(this.actionButtons).forEach(btn => {
-            if (btn !== this.actionButtons.identity && btn !== this.actionButtons.relays) btn.setEnabled(isLoggedIn);
-        });
+        for (const key in this.actionButtons) {
+            if (key !== 'identity' && key !== 'relays') {
+                this.actionButtons[key].setEnabled(isLoggedIn);
+            }
+        }
     }
 }
 
@@ -158,11 +159,11 @@ export class MainView extends Component {
             this.headerName.setContent('No Thought Selected');
             this.messages.setContent('<div class="message system"><div class="message-content">Select a thought to view messages.</div></div>');
             this.inputForm.show(false);
+            this.noteEditorContainer.show(false); // Also hide note editor if no thought selected
             this.previousThoughtId = null;
-            // Ensure message tracking is reset if no thought is selected
             this.messageRenderQueue = [];
             this.renderedMessageIds.clear();
-            this.renderScheduled = false; // Cancel any pending render
+            this.renderScheduled = false;
             return;
         }
 
@@ -210,7 +211,7 @@ export class MainView extends Component {
         for (const msg of updatedMessagesArray) {
             if (!this.renderedMessageIds.has(msg.id)) {
                 messagesToAdd.push(msg);
-                this.renderedMessageIds.add(msg.id); // Add to tracking set as we queue it
+                this.renderedMessageIds.add(msg.id);
             }
         }
 
@@ -262,8 +263,8 @@ export class MainView extends Component {
 
     renderMessages() {
         const {activeThoughtId, identity, profiles} = this.app.dataStore.state;
-        const msgsToRender = [...this.messageRenderQueue]; // Take a snapshot of the queue
-        this.messageRenderQueue = []; // Clear the queue immediately
+        const msgsToRender = [...this.messageRenderQueue];
+        this.messageRenderQueue = [];
 
         if (msgsToRender.length === 0 && this.renderedMessageIds.size === 0) {
             this.messages.setContent('');
@@ -326,11 +327,11 @@ export class MainView extends Component {
             if (field === 'title') {
                 thought.name = value;
             } else if (field === 'body') {
-                thought.body = value; // Use thought.body for notes
+                thought.body = value;
             }
             thought.lastEventTimestamp = Utils.now();
-            this.app.dataStore.saveThoughts(); // Save changes
-            this.app.dataStore.emitStateUpdated(); // Notify other components (like ThoughtList)
+            this.app.dataStore.saveThoughts();
+            this.app.dataStore.emitStateUpdated();
         }
     }
 }

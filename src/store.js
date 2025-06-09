@@ -1,8 +1,6 @@
 import { Utils, Logger, EventEmitter } from './utils.js';
-// NostrTools will be available globally via script tag in index.html
-// For localforage, it's also expected to be global.
 
-const { getPublicKey } = NostrTools; // Assuming NostrTools is global
+const { getPublicKey } = NostrTools;
 
 export class Data extends EventEmitter {
     constructor() {
@@ -31,23 +29,23 @@ export class Data extends EventEmitter {
 
     async load() {
         try {
-            const [i, t, p, a, r] = await Promise.all([
+            const [identityData, thoughtsData, profilesData, activeThoughtIdData, relaysData] = await Promise.all([
                 localforage.getItem('identity_v2').catch(() => null),
                 localforage.getItem('thoughts_v3').catch(() => null),
                 localforage.getItem('profiles_v2').catch(() => null),
                 localforage.getItem('activeThoughtId_v3').catch(() => null),
                 localforage.getItem('relays_v2').catch(() => null)
             ]);
-            if (i?.skHex) {
+            if (identityData?.skHex) {
                 try {
-                    this.state.identity.sk = Utils.hexToBytes(i.skHex);
+                    this.state.identity.sk = Utils.hexToBytes(identityData.skHex);
                     this.state.identity.pk = getPublicKey(this.state.identity.sk);
-                } catch (e) {
-                    Logger.error("Failed to load identity:", e);
+                } catch (err) {
+                    Logger.error("Failed to load identity:", err);
                     await this.clearIdentity();
                 }
             }
-            this.state.thoughts = t && typeof t === 'object' ? t : {};
+            this.state.thoughts = thoughtsData && typeof thoughtsData === 'object' ? thoughtsData : {};
             if (!this.state.thoughts.public) {
                 this.state.thoughts.public = {
                     id: 'public',
@@ -57,16 +55,16 @@ export class Data extends EventEmitter {
                     lastEventTimestamp: 0
                 };
             }
-            this.state.profiles = p && typeof p === 'object' ? p : {};
-            this.state.activeThoughtId = a && typeof a === 'string' ? a : 'public';
-            this.state.relays = r && Array.isArray(r) ? r.filter(Utils.validateRelayUrl) : this.state.relays;
+            this.state.profiles = profilesData && typeof profilesData === 'object' ? profilesData : {};
+            this.state.activeThoughtId = typeof activeThoughtIdData === 'string' ? activeThoughtIdData : 'public';
+            this.state.relays = Array.isArray(relaysData) ? relaysData.filter(Utils.validateRelayUrl) : this.state.relays;
             if (this.state.identity.pk && this.state.profiles[this.state.identity.pk]) {
                 this.state.identity.profile = this.state.profiles[this.state.identity.pk];
             }
-            Object.values(this.state.thoughts).forEach(th => th.lastEventTimestamp = th.lastEventTimestamp ?? 0);
+            Object.values(this.state.thoughts).forEach(th => th.lastEventTimestamp ||= 0);
             this.emitStateUpdated();
-        } catch (e) {
-            Logger.error('DataStore load failed:', e);
+        } catch (err) {
+            Logger.error('DataStore load failed:', err);
             await this.clearIdentity();
             this.emitStateUpdated();
         }
@@ -88,43 +86,74 @@ export class Data extends EventEmitter {
     }
 
     async saveIdentity(sk) {
-        await localforage.setItem('identity_v2', {skHex: Utils.bytesToHex(sk)});
+        try {
+            await localforage.setItem('identity_v2', {skHex: Utils.bytesToHex(sk)});
+        } catch (err) {
+            Logger.error('Failed to save identity:', err);
+        }
     }
 
     async saveThoughts() {
-        await localforage.setItem('thoughts_v3', this.state.thoughts);
+        try {
+            await localforage.setItem('thoughts_v3', this.state.thoughts);
+        } catch (err) {
+            Logger.error('Failed to save thoughts:', err);
+        }
     }
 
     async saveProfiles() {
-        await localforage.setItem('profiles_v2', this.state.profiles);
+        try {
+            await localforage.setItem('profiles_v2', this.state.profiles);
+        } catch (err) {
+            Logger.error('Failed to save profiles:', err);
+        }
     }
 
     async saveActiveThoughtId() {
-        await localforage.setItem('activeThoughtId_v3', this.state.activeThoughtId);
+        try {
+            await localforage.setItem('activeThoughtId_v3', this.state.activeThoughtId);
+        } catch (err) {
+            Logger.error('Failed to save activeThoughtId:', err);
+        }
     }
 
     async saveRelays() {
-        await localforage.setItem('relays_v2', this.state.relays);
+        try {
+            await localforage.setItem('relays_v2', this.state.relays);
+        } catch (err) {
+            Logger.error('Failed to save relays:', err);
+        }
     }
 
     async saveMessages(tId) {
         if (tId && Array.isArray(this.state.messages[tId])) {
-            await localforage.setItem(`messages_${tId}`, this.state.messages[tId]);
+            try {
+                await localforage.setItem(`messages_${tId}`, this.state.messages[tId]);
+            } catch (err) {
+                Logger.error(`Failed to save messages for ${tId}:`, err);
+            }
         }
     }
 
     async clearIdentity() {
-        const k = await localforage.keys();
-        await Promise.all([
-            localforage.removeItem('identity_v2'),
-            localforage.removeItem('thoughts_v3'),
-            localforage.removeItem('profiles_v2'),
-            localforage.removeItem('activeThoughtId_v3'),
-            ...k.filter(key => key.startsWith('messages_')).map(key => localforage.removeItem(key))
-        ]);
-        this.setState(s => {
-            s.identity = {sk: null, pk: null, profile: null};
-            s.thoughts = {
+        try {
+            const keys = await localforage.keys();
+            await Promise.all(keys.map(key => {
+                if (key.startsWith('identity_v2') ||
+                    key.startsWith('thoughts_v3') ||
+                    key.startsWith('profiles_v2') ||
+                    key.startsWith('activeThoughtId_v3') ||
+                    key.startsWith('messages_')) {
+                    return localforage.removeItem(key).catch(err => Logger.error(`Failed to remove item ${key}:`, err));
+                }
+                return Promise.resolve();
+            }));
+        } catch (err) {
+            Logger.error('Failed to get keys or remove items during clearIdentity:', err);
+        }
+        this.setState(state => {
+            state.identity = {sk: null, pk: null, profile: null};
+            state.thoughts = {
                 public: {
                     id: 'public',
                     name: 'Public Feed',
@@ -133,22 +162,22 @@ export class Data extends EventEmitter {
                     lastEventTimestamp: 0
                 }
             };
-            s.messages = {};
-            s.profiles = {};
-            s.activeThoughtId = 'public';
+            state.messages = {};
+            state.profiles = {};
+            state.activeThoughtId = 'public';
         });
     }
 
-    async loadMessages(tId) {
-        if (tId) {
+    async loadMessages(thoughtId) {
+        if (thoughtId) {
             try {
-                const messages = await localforage.getItem(`messages_${tId}`);
-                this.state.messages[tId] = Array.isArray(messages) ? messages : [];
-            } catch (e) {
-                Logger.error(`Failed to load messages for ${tId}:`, e);
-                this.state.messages[tId] = [];
+                const messages = await localforage.getItem(`messages_${thoughtId}`);
+                this.state.messages[thoughtId] = Array.isArray(messages) ? messages : [];
+            } catch (err) {
+                Logger.error(`Failed to load messages for ${thoughtId}:`, err);
+                this.state.messages[thoughtId] = [];
             }
-            this.emit(`messages:${tId}:updated`, this.state.messages[tId]);
+            this.emit(`messages:${thoughtId}:updated`, this.state.messages[thoughtId]);
         }
     }
 }
