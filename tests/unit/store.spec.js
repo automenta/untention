@@ -1,48 +1,40 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { Data } from '../../src/store.js';
-import { Utils } from '../../src/utils.js'; // Original Utils for some parts
+import { Logger } from '../../src/logger.js';
+import * as NostrUtils from '../../src/utils/nostr-utils.js';
+import * as CryptoUtils from '../../src/utils/crypto-utils.js'; // Used for bytesToHex in a test
+const { getPublicKey } = NostrTools; // Assuming NostrTools is globally available/mocked
 
-// localforage is now mocked globally in tests/setup.js
-// We will use globalThis.mockLocalForageStore to manipulate data for tests
-// Also, the global localforage mock's methods (getItem, setItem etc.) are already vi.fn() from setup.js
+vi.mock('../../src/utils/nostr-utils.js', async (importActual) => {
+    const actual = await importActual();
+    return { ...actual, validateRelayUrl: vi.fn() }; // Mock validateRelayUrl
+});
 
-// Mock parts of Utils.js used by store.js if needed
-// Utils.validateRelayUrl is used in load() for relays
-// Utils.bytesToHex and Utils.hexToBytes are used for identity
-// Utils.now is used for timestamps
-// These are simple enough that direct mocking might not be needed unless we want to control their output specifically.
-// For now, we'll use the real implementations but be mindful.
-// Logger is also from utils.js, we can spy on its methods.
-
-// NostrTools is now mocked globally in tests/setup.js
 
 describe('Data Store', () => {
   let dataStore;
-  // localforage instance is now global from setup.js and its methods are vi.fn()
 
   beforeEach(async () => {
-    // Reset the mock store's content before each test
     if (globalThis.mockLocalForageStore) {
         for (const key in globalThis.mockLocalForageStore) {
           delete globalThis.mockLocalForageStore[key];
         }
     } else {
-        globalThis.mockLocalForageStore = {}; // Ensure it exists
+        globalThis.mockLocalForageStore = {};
     }
-    // Reset call history for all mocks (including global ones like localforage methods)
     vi.clearAllMocks();
 
+    // Reset specific mocks if they are modified by tests
+    NostrUtils.validateRelayUrl.mockImplementation(() => true); // Default mock for tests
+    if (NostrTools.getPublicKey.mockClear) NostrTools.getPublicKey.mockClear();
+
+
     dataStore = new Data();
-    // Spy on console methods used by Logger
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    vi.restoreAllMocks(); // Restores original console methods
     if (dataStore.debounceTimer) {
-        clearTimeout(dataStore.debounceTimer); // Clear any pending timers
+        clearTimeout(dataStore.debounceTimer);
     }
   });
 
@@ -50,7 +42,15 @@ describe('Data Store', () => {
     it('should have correct initial state', () => {
       expect(dataStore.state.identity).toEqual({ sk: null, pk: null, profile: null });
       expect(Array.isArray(dataStore.state.relays)).toBe(true);
-      expect(dataStore.state.thoughts).toEqual({});
+      expect(dataStore.state.thoughts).toEqual({
+        public: {
+          id: 'public',
+          name: 'Public Feed',
+          type: 'public',
+          unread: 0,
+          lastEventTimestamp: 0
+        }
+      });
       expect(dataStore.state.messages).toEqual({});
       expect(dataStore.state.profiles).toEqual({});
       expect(dataStore.state.activeThoughtId).toBe('public');
@@ -58,9 +58,11 @@ describe('Data Store', () => {
     });
 
     it('should load data from localforage successfully', async () => {
-      const mockIdentity = { skHex: '00'.repeat(32) };
+      const mockSkHex = '00'.repeat(32);
+      const mockPk = `pk_for_${mockSkHex}`; // Consistent with how setup.js mocks getPublicKey
+      const mockIdentity = { skHex: mockSkHex };
       const mockThoughts = { public: { id: 'public', name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0 } };
-      const mockProfiles = { pk_for_mock_sk: { name: 'Test User' } };
+      const mockProfiles = { [mockPk]: { name: 'Test User' } };
       const mockActiveThoughtId = 'public';
       const mockRelays = ['wss://relay.example.com'];
 
@@ -70,20 +72,16 @@ describe('Data Store', () => {
       globalThis.mockLocalForageStore['activeThoughtId_v3'] = mockActiveThoughtId;
       globalThis.mockLocalForageStore['relays_v2'] = mockRelays;
 
-      // Mock Utils.validateRelayUrl to always return true for this test
-      const validateRelayUrlSpy = vi.spyOn(Utils, 'validateRelayUrl').mockImplementation(() => true);
+      NostrTools.getPublicKey.mockReturnValue(mockPk); // Ensure getPublicKey returns the expected pk
 
       await dataStore.load();
 
       expect(dataStore.state.identity.sk).toBeInstanceOf(Uint8Array);
-      expect(dataStore.state.identity.pk).toBe(`pk_for_${mockIdentity.skHex}`);
+      expect(dataStore.state.identity.pk).toBe(mockPk);
       expect(dataStore.state.thoughts).toEqual(mockThoughts);
-      // Profile assignment check (may need adjustment based on pk generation)
-      // expect(dataStore.state.identity.profile).toEqual(mockProfiles.pk_for_mock_sk);
+      expect(dataStore.state.identity.profile).toEqual(mockProfiles[mockPk]);
       expect(dataStore.state.activeThoughtId).toBe(mockActiveThoughtId);
       expect(dataStore.state.relays).toEqual(mockRelays);
-
-      validateRelayUrlSpy.mockRestore();
     });
 
     it('should use defaults for empty/missing data and create public thought', async () => {
@@ -93,22 +91,28 @@ describe('Data Store', () => {
       expect(dataStore.state.thoughts.public.name).toBe('Public Feed');
       expect(dataStore.state.profiles).toEqual({});
       expect(dataStore.state.activeThoughtId).toBe('public');
-      expect(dataStore.state.relays.length).toBeGreaterThan(0); // Default relays
+      expect(dataStore.state.relays.length).toBeGreaterThan(0);
     });
 
-    it('should handle corrupted identity data by resetting', async () => {
-      globalThis.mockLocalForageStore['identity_v2'] = { skHex: 'invalid-hex-string' }; // Corrupted
+    it('should handle corrupted identity data by resetting identity and logging error', async () => {
+      globalThis.mockLocalForageStore['identity_v2'] = { skHex: 'invalid-hex-string' };
       const resetAppSpy = vi.spyOn(dataStore, 'resetApplicationData');
+      const errorSpy = vi.spyOn(Logger, 'errorWithContext');
 
       await dataStore.load();
 
-      expect(resetAppSpy).toHaveBeenCalled();
       expect(dataStore.state.identity.sk).toBeNull();
+      expect(dataStore.state.identity.pk).toBeNull();
+      expect(dataStore.state.identity.profile).toBeNull();
+      expect(errorSpy).toHaveBeenCalledWith('DataStore', 'Corrupted identity data in storage (e.g., invalid hex or key format):', expect.any(Error));
+      expect(resetAppSpy).not.toHaveBeenCalled();
+
+      errorSpy.mockRestore();
     });
 
     it('should initialize lastEventTimestamp for thoughts if missing', async () => {
         globalThis.mockLocalForageStore['thoughts_v3'] = {
-            public: { id: 'public', name: 'Public', type: 'public' }, // Missing lastEventTimestamp
+            public: { id: 'public', name: 'Public', type: 'public' },
             dm1: { id: 'dm1', name: 'DM1', type: 'dm', lastEventTimestamp: 123 }
         };
         await dataStore.load();
@@ -144,18 +148,16 @@ describe('Data Store', () => {
       dataStore.setState(s => { s.activeThoughtId = 'newThought'; });
       expect(dataStore.state.activeThoughtId).toBe('newThought');
 
-      // Event should not be emitted immediately
       expect(emitSpy).not.toHaveBeenCalledWith('state:updated', dataStore.state);
 
       vi.advanceTimersByTime(dataStore.DEBOUNCE_DELAY);
       expect(emitSpy).toHaveBeenCalledWith('state:updated', dataStore.state);
       expect(emitSpy).toHaveBeenCalledTimes(1);
 
-      // Multiple setState calls should still result in one debounced emit
       dataStore.setState(s => { s.activeThoughtId = 'anotherThought'; });
       dataStore.setState(s => { s.activeThoughtId = 'finalThought'; });
       vi.advanceTimersByTime(dataStore.DEBOUNCE_DELAY);
-      expect(emitSpy).toHaveBeenCalledTimes(2); // One for previous, one for this batch
+      expect(emitSpy).toHaveBeenCalledTimes(2);
       expect(dataStore.state.activeThoughtId).toBe('finalThought');
 
       vi.useRealTimers();
@@ -165,7 +167,7 @@ describe('Data Store', () => {
   describe('Identity Management', () => {
     it('saveIdentity should store skHex and update state', async () => {
       const sk = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
-      const skHex = Utils.bytesToHex(sk);
+      const skHex = CryptoUtils.bytesToHex(sk);
 
       await dataStore.saveIdentity(sk);
       expect(globalThis.localforage.setItem).toHaveBeenCalledWith('identity_v2', { skHex });
@@ -174,18 +176,19 @@ describe('Data Store', () => {
     it('saveIdentity should log and re-throw error on failure', async () => {
         const sk = new Uint8Array(32);
         globalThis.localforage.setItem.mockRejectedValueOnce(new Error('Storage failed'));
+        const errorSpy = vi.spyOn(Logger, 'errorWithContext');
         await expect(dataStore.saveIdentity(sk)).rejects.toThrow('Storage failed');
-        expect(console.error).toHaveBeenCalled();
+        expect(errorSpy).toHaveBeenCalledWith('DataStore', 'Failed to save identity:', expect.any(Error));
+        errorSpy.mockRestore();
     });
 
     it('resetApplicationData should clear relevant localforage items and reset state', async () => {
-      // Populate some mock data
       globalThis.mockLocalForageStore['identity_v2'] = { skHex: 'test' };
       globalThis.mockLocalForageStore['thoughts_v3'] = { t1: {} };
       globalThis.mockLocalForageStore['profiles_v2'] = { p1: {} };
       globalThis.mockLocalForageStore['activeThoughtId_v3'] = 't1';
       globalThis.mockLocalForageStore['messages_t1'] = [{id:'m1'}];
-      globalThis.mockLocalForageStore['relays_v2'] = ['wss://r1.com']; // Relays are not cleared by resetApplicationData
+      globalThis.mockLocalForageStore['relays_v2'] = ['wss://r1.com'];
 
       const setStateSpy = vi.spyOn(dataStore, 'setState');
       await dataStore.resetApplicationData();
@@ -197,12 +200,11 @@ describe('Data Store', () => {
       expect(globalThis.localforage.removeItem).toHaveBeenCalledWith('messages_t1');
       expect(globalThis.localforage.removeItem).not.toHaveBeenCalledWith('relays_v2');
 
-
       expect(setStateSpy).toHaveBeenCalled();
-      const finalState = dataStore.state; // Get state after reset via spy or direct access
+      const finalState = dataStore.state;
       expect(finalState.identity.sk).toBeNull();
       expect(finalState.thoughts.public).toBeDefined();
-      expect(Object.keys(finalState.thoughts).length).toBe(1); // Only public thought
+      expect(Object.keys(finalState.thoughts).length).toBe(1);
       expect(finalState.messages).toEqual({});
       expect(finalState.profiles).toEqual({});
       expect(finalState.activeThoughtId).toBe('public');
@@ -219,7 +221,6 @@ describe('Data Store', () => {
 
     for (const tc of testCases) {
       it(`${tc.method} should call localforage.setItem with correct key and data`, async () => {
-        // Modify state if needed to have some data
         if (typeof dataStore.state[tc.key.split('_')[0]] === 'object') {
              dataStore.state[tc.key.split('_')[0]].testData = 'sample';
         } else {
@@ -231,8 +232,10 @@ describe('Data Store', () => {
 
       it(`${tc.method} should log and re-throw error on failure`, async () => {
         globalThis.localforage.setItem.mockRejectedValueOnce(new Error('Storage failed'));
+        const errorSpy = vi.spyOn(Logger, 'errorWithContext');
         await expect(dataStore[tc.method]()).rejects.toThrow('Storage failed');
-        expect(console.error).toHaveBeenCalled();
+        expect(errorSpy).toHaveBeenCalledWith('DataStore', `Failed to save ${tc.key.split('_')[0]}:`, expect.any(Error));
+        errorSpy.mockRestore();
       });
     }
 
@@ -254,8 +257,10 @@ describe('Data Store', () => {
       const thoughtId = 'dm1';
       dataStore.state.messages[thoughtId] = [{ id: 'msg1' }];
       globalThis.localforage.setItem.mockRejectedValueOnce(new Error('Storage error for messages'));
+      const errorSpy = vi.spyOn(Logger, 'errorWithContext');
       await expect(dataStore.saveMessages(thoughtId)).rejects.toThrow('Storage error for messages');
-      expect(console.error).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith('DataStore', `Failed to save messages for ${thoughtId}:`, expect.any(Error));
+      errorSpy.mockRestore();
     });
   });
 });

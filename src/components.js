@@ -1,8 +1,8 @@
 import DOMPurify from 'dompurify';
 import { Component, Button } from './ui.js';
-import { Logger } from '../logger.js'; // Assuming Logger might be used, good practice to include
+import { Logger } from './logger.js'; // Assuming Logger might be used, good practice to include
 // No direct use of EventEmitter in this file's classes, but keeping for potential (though unlikely) module-level use.
-// import { EventEmitter } from '../event-emitter.js';
+import { EventEmitter } from './event-emitter.js';
 import { escapeHtml, createAvatarSvg, getUserColor } from './utils/ui-utils.js';
 import { formatTime, now } from './utils/time-utils.js';
 import { shortenPubkey } from './utils/nostr-utils.js'; // findTag not used here
@@ -340,7 +340,7 @@ export class ThoughtList extends Component {
 }
 
 export class MainView extends Component {
-    constructor(app) {
+    constructor(app, { noThoughtSelectedView, noteEditorView, messageListView }) {
         super('div', {id: 'main-view'});
         this.app = app;
 
@@ -348,13 +348,13 @@ export class MainView extends Component {
         this.headerActions = new Component('div', {id: 'thought-header-actions'});
         this.header = new Component('div', {id: 'thought-header'}).add(this.headerName, this.headerActions);
 
-        // Instantiate sub-components
-        this.noThoughtSelectedView = new NoThoughtSelectedView();
-        this.noteEditorView = new NoteEditorView(this.app, this.app.dataStore);
-        this.messageListView = new MessageListView(this.app, this.app.dataStore);
+        // Assign injected sub-components
+        this.noThoughtSelectedView = noThoughtSelectedView;
+        this.noteEditorView = noteEditorView;
+        this.messageListView = messageListView;
 
         // Initially hide all sub-views
-        this.noThoughtSelectedView.show(false);
+        if (this.noThoughtSelectedView) this.noThoughtSelectedView.show(false);
         this.noteEditorView.show(false);
         this.messageListView.show(false);
 
@@ -362,9 +362,15 @@ export class MainView extends Component {
         this.input = new Component('textarea', {id: 'message-input', placeholder: 'Type your message...'});
         this.sendButton = new Button({textContent: 'Send', type: 'submit'});
         this.inputForm.add(this.input, this.sendButton);
-        this.inputForm.show(false); // Initially hidden
+        if (this.inputForm) this.inputForm.show(false); // Initially hidden
 
-        this.add(this.header, this.noThoughtSelectedView, this.noteEditorView, this.messageListView, this.inputForm);
+        // Add elements of injected views if they exist
+        const viewsToAdd = [this.header];
+        if (this.noThoughtSelectedView && this.noThoughtSelectedView.element) viewsToAdd.push(this.noThoughtSelectedView);
+        if (this.noteEditorView && this.noteEditorView.element) viewsToAdd.push(this.noteEditorView);
+        if (this.messageListView && this.messageListView.element) viewsToAdd.push(this.messageListView);
+        viewsToAdd.push(this.inputForm);
+        this.add(...viewsToAdd.filter(v => v)); // Filter out any undefined views before adding
 
         this.inputForm.element.addEventListener('submit', e => {
             e.preventDefault();

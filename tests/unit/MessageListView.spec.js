@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach, vitest } from 'vitest';
 import DOMPurify from 'dompurify';
 import { MessageListView } from '../../src/components.js';
-import { Utils } from '../../src/utils.js'; // For Utils.now() if used, and other utils
+import * as UiUtils from '../../src/utils/ui-utils.js';
+import * as TimeUtils from '../../src/utils/time-utils.js';
 
 // Mock requestAnimationFrame
 global.requestAnimationFrame = vi.fn((cb) => { cb(); return 1; }); // Execute callback immediately
@@ -33,8 +34,8 @@ describe('MessageListView', () => {
         mockApp = { dataStore: mockDataStore };
 
         // Spy on Utils.createAvatarSvg to check calls if needed
-        vi.spyOn(Utils, 'createAvatarSvg').mockReturnValue('fake-avatar.svg');
-        vi.spyOn(Utils, 'formatTime').mockReturnValue('12:00 PM');
+        vi.spyOn(UiUtils, 'createAvatarSvg').mockReturnValue('fake-avatar.svg');
+        vi.spyOn(TimeUtils, 'formatTime').mockReturnValue('12:00 PM');
 
 
         view = new MessageListView(mockApp, mockDataStore);

@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
-import { Utils as RealUtils, Logger as RealLogger } from '../src/utils.js'; // Import real items
+import { Logger as RealLogger } from '../src/logger.js'; // Import real items
+import * as RealCryptoUtils from '../src/utils/crypto-utils.js'; // For NostrTools mock
 
 // --- Crypto Polyfills ---
 if (typeof globalThis.crypto === 'undefined') {
@@ -43,13 +44,13 @@ const mockSimplePoolInstance = {
 };
 
 const nostrToolsMock = {
-    getPublicKey: vi.fn(skUint8Array => `pk_for_${RealUtils.bytesToHex(skUint8Array)}`),
+    getPublicKey: vi.fn(skUint8Array => `pk_for_${RealCryptoUtils.bytesToHex(skUint8Array)}`),
     generateSecretKey: vi.fn(() => new Uint8Array(32).fill(0xAA)),
     finalizeEvent: vi.fn((eventTemplate, sk) => ({
         ...eventTemplate,
         id: `mockEventId_${Math.random().toString(36).substring(2,10)}`,
         sig: 'mockSig',
-        pubkey: `pk_for_${RealUtils.bytesToHex(sk)}`
+        pubkey: `pk_for_${RealCryptoUtils.bytesToHex(sk)}`
     })),
     verifyEvent: vi.fn(() => true),
     nip04: {
@@ -75,21 +76,19 @@ vi.stubGlobal('NostrTools', nostrToolsMock);
 
 // --- Mock for src/utils.js Logger ---
 // This allows us to spy on Logger.log, .warn, .error calls
-// The actual `Utils` object with its functions will be imported by modules under test.
-// We only mock the Logger part of it.
-vi.mock('../src/utils.js', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual, // Exports EventEmitter, Utils object
-    Logger: { // Mocked Logger
-      log: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-    // If specific Utils functions need fine-grained mocking for some tests:
-    // Utils: {
-    //   ...actual.Utils,
-    //   someFunctionToMock: vi.fn(),
-    // }
-  };
-});
+// We fully mock the Logger class and its static methods.
+vi.mock('../src/logger.js', () => ({
+  Logger: {
+    setDebugMode: vi.fn(),
+    isDebugMode: vi.fn(),
+    log: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    logWithContext: vi.fn(),
+    infoWithContext: vi.fn(),
+    warnWithContext: vi.fn(),
+    errorWithContext: vi.fn(),
+    debug: vi.fn(),
+  }
+}));

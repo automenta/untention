@@ -3,26 +3,17 @@ const {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04
 import { EventEmitter } from './event-emitter.js';
 import { Logger } from './logger.js';
 import { now } from './utils/time-utils.js';
-// findTag, shortenPubkey, aesDecrypt are used by NostrEventProcessor
 import { NostrEventProcessor } from './nostr-event-processor.js';
 
-// Nostr Event Kinds - Will be removed if only processor uses them.
-// For now, keep PROFILE_KIND, TEXT_NOTE_KIND, ENCRYPTED_DM_KIND, GROUP_CHAT_KIND
-// as subscribeToCoreEvents and fetchHistoricalMessages use them.
 const PROFILE_KIND = 0;
 const TEXT_NOTE_KIND = 1;
 const ENCRYPTED_DM_KIND = 4;
 const GROUP_CHAT_KIND = 41;
 
-
-// Time Constants
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
-
-// Cache behavior constants
 const SEEN_EVENT_IDS_MAX_SIZE = 2000;
-const SEEN_EVENT_IDS_TRIM_THRESHOLD = 1500; // Number of items to keep after trim
-
-const MESSAGE_LIMIT = 100; // Max messages to fetch/store per thought (already a constant, good)
+const SEEN_EVENT_IDS_TRIM_THRESHOLD = 1500;
+const MESSAGE_LIMIT = 100;
 
 
 export class Nostr extends EventEmitter {
@@ -105,7 +96,6 @@ export class Nostr extends EventEmitter {
                     return;
                 }
                 this.seenEventIds.add(event.id);
-                // Prune the seenEventIds set to prevent unbounded growth
                 if (this.seenEventIds.size > SEEN_EVENT_IDS_MAX_SIZE) {
                     const tempArray = Array.from(this.seenEventIds);
                     this.seenEventIds = new Set(tempArray.slice(tempArray.length - SEEN_EVENT_IDS_TRIM_THRESHOLD));
@@ -138,12 +128,16 @@ export class Nostr extends EventEmitter {
 
         try {
             Logger.debug('Nostr', 'Publishing event:', signedEvent);
-            const results = await Promise.any(this.pool.publish(currentRelays, signedEvent));
+            const promises = this.pool.publish(currentRelays, signedEvent);
+            if (!Array.isArray(promises) || !promises.every(p => p instanceof Promise)) {
+                 Logger.errorWithContext('Nostr', 'this.pool.publish did not return an array of Promises. Mock issue?', promises);
+            }
+            const results = await Promise.any(promises);
             Logger.debug('Nostr', 'Event published successfully to at least one relay:', results);
             return signedEvent;
         } catch (err) {
             if (err instanceof AggregateError) {
-                Logger.errorWithContext('Nostr', 'Publish failed on all relays (AggregateError):', err.errors);
+                Logger.errorWithContext('Nostr', 'Publish failed on all relays (AggregateError):', err); // Log the err itself
             } else {
                 Logger.errorWithContext('Nostr', 'Publish failed on all relays (Unknown Error):', err);
             }
@@ -152,16 +146,13 @@ export class Nostr extends EventEmitter {
     }
 
     subscribeToCoreEvents() {
-        // Subscribe to public text notes
-        this.subscribe('public', [{kinds: [TEXT_NOTE_KIND]}], { onevent(event) {} });
+        this.subscribe('public', [{kinds: [TEXT_NOTE_KIND]}]);
         const {identity} = this.dataStore.state;
         if (identity.pk) {
             const sevenDaysAgo = now() - SEVEN_DAYS_IN_SECONDS;
-            // Subscribe to DMs addressed to the user
             this.subscribe('dms', [{kinds: [ENCRYPTED_DM_KIND], '#p': [identity.pk], since: sevenDaysAgo}]);
-            // Subscribe to user's own profile updates
             this.subscribe('profile', [{kinds: [PROFILE_KIND], authors: [identity.pk], limit: 1}]);
-            this.resubscribeToGroups(); // Resubscribe to any group chats
+            this.resubscribeToGroups();
         }
     }
 
@@ -170,12 +161,11 @@ export class Nostr extends EventEmitter {
         if (gids.length > 0) {
             const sevenDaysAgo = now() - SEVEN_DAYS_IN_SECONDS;
             this.subscribe('groups', [{
-                kinds: [GROUP_CHAT_KIND], // Use constant for group chat kind
+                kinds: [GROUP_CHAT_KIND],
                 '#g': gids,
                 since: sevenDaysAgo
             }]);
         } else {
-            // If no groups, ensure any existing group subscription is closed
             this.subs.get('groups')?.unsub();
         }
     }
@@ -189,7 +179,7 @@ export class Nostr extends EventEmitter {
 
         let filters = [];
         const publicHistoricalPeriod = now() - SEVEN_DAYS_IN_SECONDS;
-        const publicHistoricalLimit = 20; // Specific limit for public feed history
+        const publicHistoricalLimit = 20;
         const dmGroupHistoricalPeriod = now() - SEVEN_DAYS_IN_SECONDS;
 
         if (thought.type === 'public') {
@@ -198,14 +188,13 @@ export class Nostr extends EventEmitter {
             filters.push({
                 kinds: [ENCRYPTED_DM_KIND],
                 '#p': [thought.pubkey],
-                authors: [identity.pk, thought.pubkey], // Fetch DMs sent by user or to user from the other party
+                authors: [identity.pk, thought.pubkey],
                 limit: MESSAGE_LIMIT,
                 since: dmGroupHistoricalPeriod
             });
         } else if (thought.type === 'group') {
             filters.push({kinds: [GROUP_CHAT_KIND], '#g': [thought.id], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod});
         } else {
-            // Notes are local and don't need historical fetching from relays
             Logger.logWithContext('Nostr', `Skipping historical fetch for unsupported or local thought type: ${thought.type}`);
             return;
         }
@@ -239,10 +228,9 @@ export class Nostr extends EventEmitter {
         Logger.debug('Nostr', `Fetching profile for pubkey: ${pubkey}`);
 
         try {
-            const event = await this.pool.get(relays, {kinds: [PROFILE_KIND], authors: [pubkey]}); // Use constant
+            const event = await this.pool.get(relays, {kinds: [PROFILE_KIND], authors: [pubkey]});
             if (event) {
                 Logger.debug('Nostr', `Fetched profile event for ${pubkey}:`, event);
-                 // Seen event check for profile fetch
                 if (!this.seenEventIds.has(event.id)) {
                     this.seenEventIds.add(event.id);
                     await this.eventProcessor.processNostrEvent(event, 'profile-fetch');
