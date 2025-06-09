@@ -1,5 +1,6 @@
 import { Logger, Utils } from "./utils.js";
 import { Button, Component } from "./ui.js";
+import { ModalService } from "./modal-service.js"; // Import ModalService
 import {Nostr} from "./nostr.js";
 import { Data } from './store.js';
 import { IdentityPanel, ThoughtList, MainView } from './components.js';
@@ -12,6 +13,7 @@ class App {
         this.dataStore = new Data();
         this.ui = new UIController();
         this.nostr = new Nostr(this.dataStore, this.ui);
+        this.modalService = new ModalService(this, this.ui, this.dataStore); // Instantiate ModalService
         this.init();
         window.addEventListener('unhandledrejection', e => {
             Logger.error('Unhandled promise rejection:', e.reason);
@@ -20,9 +22,15 @@ class App {
 
     }
 
+    /**
+     * Initializes the application.
+     * Sets up the main UI components, registers event listeners,
+     * loads initial data, and connects to Nostr relays.
+     */
     async init() {
         this.ui.setLoading(true);
         try {
+            // Setup main application shell and layout
             const shell = new Component('div', {id: 'app-shell'});
             const sidebar = new Component('div', {id: 'sidebar'});
             const statusBar = new Component('div', {id: 'status-bar'});
@@ -30,47 +38,62 @@ class App {
             sidebar.add(new IdentityPanel(this), new ThoughtList(this), statusBar);
             shell.add(sidebar, this.mainView).mount(document.body);
 
+            // Listen for Nostr connection status changes to update the UI
             this.nostr.on('connection:status', ({status, count}) => {
-            const s = {connecting: "Connecting...", connected: "Connected", disconnected: "Disconnected"}[status];
-            statusBar.setContent(`<div class="relay-status-icon ${status}"></div><span>${count} Relays</span><span style="margin-left: auto;">${s}</span>`);
+            const statusMessage = {connecting: "Connecting...", connected: "Connected", disconnected: "Disconnected"}[status];
+            statusBar.setContent(`<div class="relay-status-icon ${status}"></div><span>${count} Relays</span><span style="margin-left: auto;">${statusMessage}</span>`);
         });
 
+        // Listen for changes in the data store, particularly identity changes, to trigger Nostr reconnections
         this.dataStore.on('state:updated', ({identity}) => {
+            // If the public key has changed, update currentPk and reconnect to Nostr
             if (this.currentPk !== undefined && this.currentPk !== identity.pk) {
                 this.currentPk = identity.pk;
-                this.nostr.connect();
+                this.nostr.connect(); // Reconnect with the new identity
             }
         });
 
+        // Load existing data from storage
         await this.dataStore.load();
+        // If no secret key is found, prompt the user to manage their identity (load or generate one)
         if (!this.dataStore.state.identity.sk) {
-            this._showIdentityModal();
+            this.modalService.show('identity'); // Use ModalService
         }
-            this.currentPk = this.dataStore.state.identity.pk;
-            this.nostr.connect();
+            this.currentPk = this.dataStore.state.identity.pk; // Set current public key
+            this.nostr.connect(); // Initial connection to Nostr relays
+            // Fetch historical messages for the currently active thought (e.g., 'public' or last selected)
             await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[this.dataStore.state.activeThoughtId]);
         } catch (e) {
             Logger.error('Initialization failed:', e);
-            this.ui.showToast(`Initialization failed: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Initialization failed: ${e.message || 'An unexpected error occurred during app initialization.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
     }
 
+    /**
+     * Handles selecting a new thought (e.g., a chat, DM, or note).
+     * Updates the application state to reflect the new active thought,
+     * marks messages as read, saves changes, and fetches relevant messages.
+     * @param {string} id - The ID of the thought to select.
+     */
     async selectThought(id) {
         this.ui.setLoading(true);
         try {
             const currentActiveThoughtId = this.dataStore.state.activeThoughtId;
             const thoughts = this.dataStore.state.thoughts;
+            // Determine the new active thought ID; defaults to 'public' if the given id is invalid
             const newActiveThoughtId = thoughts[id] ? id : 'public';
 
             const thoughtToUpdate = thoughts[newActiveThoughtId];
             let unreadActuallyChanged = false;
 
+            // Check if the thought's unread status actually needs to change to avoid unnecessary saves
             if (thoughtToUpdate && thoughtToUpdate.unread > 0) {
                 unreadActuallyChanged = true;
             }
 
+            // Update the state: set the new active thought ID and reset its unread count
             this.dataStore.setState(s => {
                 s.activeThoughtId = newActiveThoughtId;
                 if (s.thoughts[newActiveThoughtId]) {
@@ -78,38 +101,50 @@ class App {
                 }
             });
 
+            // If the active thought has genuinely changed, save this preference
             if (currentActiveThoughtId !== newActiveThoughtId) {
                 await this.dataStore.saveActiveThoughtId();
             }
+            // If the unread count was reset, save the updated thoughts data
             if (unreadActuallyChanged) {
                 await this.dataStore.saveThoughts();
             }
 
+            // If the active thought changed, load its messages and fetch historical ones
             if (currentActiveThoughtId !== newActiveThoughtId) {
                 await this.dataStore.loadMessages(newActiveThoughtId);
                 await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[newActiveThoughtId]);
             }
         } catch (e) {
             Logger.error(`Error selecting thought ${id}:`, e);
-            this.ui.showToast(`Failed to load thought: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Failed to load thought: ${e.message || 'An unexpected error occurred while selecting the thought.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
     }
 
+    /**
+     * Centralized handler for dispatching actions triggered by UI components or other parts of the application.
+     * @param {string} action - The name of the action to perform.
+     * @param {any} data - Optional data associated with the action.
+     */
     handleAction(action, data) {
         const actions = {
-            'manage-identity': () => this.dataStore.state.identity.sk ? this.logout() : this._showIdentityModal(),
-            'show-modal': (modal) => this.showModal(modal),
+            'manage-identity': () => this.dataStore.state.identity.sk ? this.logout() : this.modalService.show('identity'),
+            'show-modal': (modal) => this.modalService.show(modal),
             'select-thought': (id) => this.selectThought(id),
             'leave-thought': () => this.leaveThought(),
             'send-message': (content) => this.sendMessage(content),
-            'update-profile': (d) => this.updateProfile(d),
-            'create-dm': (d) => this.createDmThought(d.get('pubkey')),
-            'create-group': (d) => this.createGroupThought(d.get('name')),
-            'join-group': (d) => this.joinGroupThought(d.get('id'), d.get('key'), d.get('name')),
-            'add-relay': (d) => this.updateRelays([...this.dataStore.state.relays, d.get('url')]),
-            'remove-relay': (url) => this.updateRelays(this.dataStore.state.relays.filter(u => u !== url)),
+            'update-profile': (formData) => this.updateProfile(formData),
+            'create-dm': (formData) => this.createDmThought(formData.get('pubkey')),
+            'create-group': (formData) => this.createGroupThought(formData.get('name')),
+            'join-group': (formData) => this.joinGroupThought(formData.get('id'), formData.get('key'), formData.get('name')),
+            'add-relay': (formData) => this.updateRelays([...this.dataStore.state.relays, formData.get('url')]),
+            'remove-relay': (url) => {
+                if (confirm(`Are you sure you want to remove the relay: ${url}?`)) {
+                    this.updateRelays(this.dataStore.state.relays.filter(u => u !== url));
+                }
+            },
             'create-note': () => this.createNoteThought(),
         };
         if (actions[action]) actions[action](data);
@@ -117,21 +152,24 @@ class App {
 
     async leaveThought() {
         const {activeThoughtId, thoughts} = this.dataStore.state;
-        const t = thoughts[activeThoughtId];
-        if (!t || !confirm(`Leave/hide ${t.type} "${t.name}"?`)) return;
+        const thoughtToLeave = thoughts[activeThoughtId]; // Renamed 't' to 'thoughtToLeave'
+        if (!thoughtToLeave || !confirm(`Leave/hide ${thoughtToLeave.type} "${thoughtToLeave.name}"?`)) return;
         this.ui.setLoading(true);
         try {
+            // Remove the thought and its messages from the state
             this.dataStore.setState(s => {
                 delete s.thoughts[activeThoughtId];
                 delete s.messages[activeThoughtId];
             });
+            // Persist changes: remove messages from localforage and save updated thoughts list
             await Promise.all([localforage.removeItem(`messages_${activeThoughtId}`), this.dataStore.saveThoughts()]);
+            // Select the public thought by default after leaving one
             await this.selectThought('public');
             this.ui.showToast('Thought removed.', 'info');
             this.ui.showToast('Switched to Public chat.', 'info');
         } catch (e) {
             Logger.error(`Error leaving thought ${activeThoughtId}:`, e);
-            this.ui.showToast(`Failed to remove thought: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Failed to remove thought: ${e.message || 'An unexpected error occurred while removing the thought.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
@@ -145,31 +183,52 @@ class App {
             this.ui.showToast('Logged out.', 'info');
         } catch (e) {
             Logger.error('Error during logout:', e);
-            this.ui.showToast(`Logout failed: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Logout failed: ${e.message || 'An unexpected error occurred during logout.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
     }
 
+    /**
+     * Saves the user's identity (secret key).
+     * Can either use a provided secret key or generate a new one if input is empty.
+     * Handles confirmation for overwriting an existing identity.
+     * @param {string} skInput - The secret key input (nsec, hex, or empty for new).
+     */
     async saveIdentity(skInput) {
         this.ui.hideModal();
         this.ui.setLoading(true);
         try {
-            let sk;
+            // Confirmation before potentially overwriting an existing identity.
+            if (this.dataStore.state.identity.sk) {
+                const message = skInput
+                    ? 'Are you sure you want to overwrite your existing identity? This action cannot be undone.'
+                    : 'Are you sure you want to generate a new identity? This will overwrite your existing identity and cannot be undone.';
+                if (!confirm(message)) {
+                    this.ui.setLoading(false); // Abort if user cancels.
+                    return;
+                }
+            }
+
+            let sk; // Variable to hold the processed secret key in byte format.
+            // Decode nsec input, convert hex input, or generate a new key.
             if (skInput.startsWith('nsec')) sk = nip19.decode(skInput).data;
             else if (/^[0-9a-fA-F]{64}$/.test(skInput)) sk = Utils.hexToBytes(skInput);
-            else if (!skInput) sk = generateSecretKey();
+            else if (!skInput) sk = generateSecretKey(); // Generate new if no input
             else throw new Error('Invalid secret key format.');
+
+            // Clear previous identity data before saving the new one.
             await this.dataStore.clearIdentity();
             await this.dataStore.saveIdentity(sk);
-            await this.dataStore.load(); // Reloads data, which will trigger connect via state:updated
+            // Reload all data, which will also trigger Nostr reconnection via 'state:updated' event.
+            await this.dataStore.load();
             this.ui.showToast('Identity loaded!', 'success');
         } catch (e) {
-            this.ui.showToast(`Error: ${e.message || 'Unknown error'}`, 'error');
-            // Attempt to clear identity again or ensure a clean state if primary load failed.
-            // This is complex; current handling re-clears if sk processing fails.
-            // If clearIdentity itself fails here, it's a deeper issue.
-            if (!skInput) { // Only clear if it was a new key generation that failed partway
+            this.ui.showToast(`Error saving identity: ${e.message || 'An unexpected error occurred while saving the identity.'}`, 'error');
+            // If key generation failed partway (e.g., after clearIdentity but before saveIdentity),
+            // and it was an attempt to generate a *new* key (no skInput),
+            // try to clear identity again to prevent a corrupted state.
+            if (!skInput) {
                 await this.dataStore.clearIdentity();
             }
         } finally {
@@ -177,32 +236,46 @@ class App {
         }
     }
 
+    /**
+     * Sends a message to the active thought.
+     * The message is encrypted if the thought is a DM or a group chat.
+     * @param {string} content - The plain text content of the message.
+     */
     async sendMessage(content) {
         this.ui.setLoading(true);
         try {
             const {activeThoughtId, thoughts, identity} = this.dataStore.state;
-            const t = thoughts[activeThoughtId];
-            if (!t) throw new Error('No active thought selected');
+            const activeThought = thoughts[activeThoughtId]; // Renamed 't' to 'activeThought'
+            if (!activeThought) throw new Error('No active thought selected');
             if (!identity.sk) throw new Error('No identity loaded. Please load or create one to send messages.');
 
-            let eventTemplate = {kind: 1, created_at: Utils.now(), tags: [], content};
-            if (t.type === 'dm') {
+            let eventTemplate = {kind: 1, created_at: Utils.now(), tags: [], content}; // Default for public thoughts
+
+            // Customize event for DMs (kind 4)
+            if (activeThought.type === 'dm') {
                 eventTemplate.kind = 4;
-                eventTemplate.tags.push(['p', t.pubkey]);
-                eventTemplate.content = await nip04.encrypt(identity.sk, t.pubkey, content);
-            } else if (t.type === 'group') {
-                eventTemplate.kind = 41;
-                eventTemplate.tags.push(['g', t.id]);
-                eventTemplate.content = await Utils.crypto.aesEncrypt(content, t.secretKey);
-            } else if (t.type !== 'public') { // No specific handling for public, but error for other unknown types
+                eventTemplate.tags.push(['p', activeThought.pubkey]);
+                eventTemplate.content = await nip04.encrypt(identity.sk, activeThought.pubkey, content);
+            }
+            // Customize event for group chats (kind 41, custom provisional kind)
+            else if (activeThought.type === 'group') {
+                eventTemplate.kind = 41; // Using a custom kind for group messages
+                eventTemplate.tags.push(['g', activeThought.id]); // Tag with group ID for filtering
+                eventTemplate.content = await Utils.crypto.aesEncrypt(content, activeThought.secretKey);
+            }
+            // Disallow sending messages to other thought types if not public, DM, or group
+            else if (activeThought.type !== 'public') {
                 throw new Error("Cannot send message in this thought type.");
             }
+
+            // Publish the event to Nostr relays
             const signedEvent = await this.nostr.publish(eventTemplate);
-            await this.nostr.processMessage({...signedEvent, content}, activeThoughtId);
+            // Process the sent message locally to update UI immediately
+            await this.nostr.processMessage({...signedEvent, content}, activeThoughtId); // Pass original plain content for local display
             this.ui.showToast('Message sent!', 'success');
         } catch (e) {
             Logger.error("Send message error:", e);
-            this.ui.showToast(`Failed to send message: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Failed to send message: ${e.message || 'An unexpected error occurred while sending the message.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
@@ -223,7 +296,7 @@ class App {
             await this.nostr.processKind0(event);
             this.ui.showToast('Profile updated!', 'success');
         } catch (e) {
-            this.ui.showToast(`Profile update failed: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Profile update failed: ${e.message || 'An unexpected error occurred while updating the profile.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
@@ -252,7 +325,7 @@ class App {
             this.selectThought(pk);
             this.ui.showToast(`DM started.`, 'success');
         } catch (e) {
-            this.ui.showToast(`Error: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Error creating DM: ${e.message || 'An unexpected error occurred while creating the DM.'}`, 'error');
         }
         // No finally setLoading(false) here as it's a quick op or error is shown
     }
@@ -279,10 +352,10 @@ class App {
             await this.dataStore.saveThoughts();
             this.selectThought(id);
             this.ui.showToast(`Group "${name}" created.`, 'success');
-            this.showModal('groupInfo');
+            this.modalService.show('groupInfo'); // Use ModalService
         } catch (e) {
             Logger.error('Error creating group thought:', e);
-            this.ui.showToast(`Failed to create group: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Failed to create group: ${e.message || 'An unexpected error occurred while creating the group.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
@@ -309,7 +382,7 @@ class App {
             this.ui.showToast(`Joined group "${name}".`, 'success');
         } catch (e) {
             Logger.error('Error joining group thought:', e);
-            this.ui.showToast(`Failed to join group: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Failed to join group: ${e.message || 'An unexpected error occurred while joining the group.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
@@ -322,16 +395,20 @@ class App {
         }
         this.ui.setLoading(true);
         try {
-            const newId = crypto.randomUUID();
+            const newId = crypto.randomUUID(); // Generate a unique ID for the new note.
             let noteName = 'New Note';
-            const existingNames = new Set(Object.values(this.dataStore.state.thoughts).filter(t => t.type === 'note').map(t => t.name));
+            // Ensure the note name is unique by appending a number if "New Note" or "New Note X" already exists.
+            const existingNames = new Set(Object.values(this.dataStore.state.thoughts)
+                                            .filter(t => t.type === 'note')
+                                            .map(t => t.name));
             if (existingNames.has(noteName)) {
                 let i = 1;
                 while (existingNames.has(`New Note ${i}`)) {
                     i++;
                 }
-                noteName = `New Note ${i}`;
+                noteName = `New Note ${i}`; // Found a unique name like "New Note 1", "New Note 2", etc.
             }
+
             const newNote = {
                 id: newId,
                 name: noteName,
@@ -348,7 +425,7 @@ class App {
             this.ui.showToast('Note created.', 'success');
         } catch (e) {
             Logger.error('Error creating note thought:', e);
-            this.ui.showToast(`Failed to create note: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Failed to create note: ${e.message || 'An unexpected error occurred while creating the note.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }
@@ -369,231 +446,12 @@ class App {
             this.ui.showToast('Relay list updated. Reconnecting...', 'info');
         } catch (e) {
             Logger.error('Error updating relays:', e);
-            this.ui.showToast(`Failed to update relays: ${e.message || 'Unknown error'}`, 'error');
+            this.ui.showToast(`Failed to update relays: ${e.message || 'An unexpected error occurred while updating relays.'}`, 'error');
         }
         // No finally setLoading(false) here as it's a quick op or error is shown,
         // and nostr.connect() will manage its own connection status updates.
     }
 
-    _showIdentityModal() {
-        const form = new Component('form', {
-            onsubmit: e => {
-                e.preventDefault();
-                this.saveIdentity(new FormData(e.target).get('privkey'));
-            }
-        });
-        form.add(new Component('label', {textContent: 'Secret Key (nsec/hex) or blank for new:'}), new Component('input', {
-            type: 'password',
-            name: 'privkey'
-        }));
-        this.ui.showModal({
-            title: 'Manage Identity',
-            body: form,
-            buttons: [
-                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
-                new Button({textContent: 'Load/Gen', type: 'submit', onClick: () => form.element.requestSubmit()})
-            ]
-        });
-    }
-
-    _showProfileModal() {
-        const {identity} = this.dataStore.state;
-        const p = identity.profile ?? {};
-        const form = new Component('form', {
-            onsubmit: e => {
-                e.preventDefault();
-                this.handleAction('update-profile', new FormData(e.target));
-            }
-        });
-        form.add(
-            new Component('label', {textContent: 'Name:'}),
-            new Component('input', {name: 'name', value: p.name ?? ''}),
-            new Component('label', {textContent: 'Picture URL:'}),
-            new Component('input', {name: 'picture', value: p.picture ?? ''}),
-            new Component('label', {textContent: 'NIP-05 Identifier:'}),
-            new Component('input', {name: 'nip05', value: p.nip05 ?? ''})
-        );
-        this.ui.showModal({
-            title: 'Edit Profile',
-            body: form,
-            buttons: [
-                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
-                new Button({textContent: 'Save', type: 'submit', onClick: () => form.element.requestSubmit()})
-            ]
-        });
-    }
-
-    _showCreateGroupModal() {
-        const form = new Component('form', {
-            onsubmit: e => {
-                e.preventDefault();
-                this.handleAction('create-group', new FormData(e.target));
-            }
-        });
-        form.add(
-            new Component('label', {textContent: 'Group Name:'}),
-            new Component('input', {name: 'name', placeholder: 'Group Name'})
-        );
-        this.ui.showModal({
-            title: 'Create Group',
-            body: form,
-            buttons: [
-                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
-                new Button({textContent: 'Create', type: 'submit', onClick: () => form.element.requestSubmit()})
-            ]
-        });
-    }
-
-    _showJoinGroupModal() {
-        const form = new Component('form', {
-            onsubmit: e => {
-                e.preventDefault();
-                this.handleAction('join-group', new FormData(e.target));
-            }
-        });
-        form.add(
-            new Component('label', {textContent: 'Group ID:'}),
-            new Component('input', {name: 'id', placeholder: 'Group ID'}),
-            new Component('label', {textContent: 'Secret Key (Base64):'}),
-            new Component('input', {name: 'key', placeholder: 'Secret Key'}),
-            new Component('label', {textContent: 'Group Name (Optional, for display):'}),
-            new Component('input', {name: 'name', placeholder: 'Group Name'})
-        );
-        this.ui.showModal({
-            title: 'Join Group',
-            body: form,
-            buttons: [
-                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
-                new Button({textContent: 'Join', type: 'submit', onClick: () => form.element.requestSubmit()})
-            ]
-        });
-    }
-
-    _showCreateDmModal() {
-        const form = new Component('form', {
-            onsubmit: e => {
-                e.preventDefault();
-                this.handleAction('create-dm', new FormData(e.target));
-            }
-        });
-        form.add(
-            new Component('label', {textContent: "Recipient's Public Key (npub or hex):"}),
-            new Component('input', {name: 'pubkey', placeholder: "npub..."})
-        );
-        this.ui.showModal({
-            title: 'New Direct Message',
-            body: form,
-            buttons: [
-                new Button({textContent: 'Cancel', className: 'secondary', onClick: () => this.ui.hideModal()}),
-                new Button({textContent: 'Start DM', type: 'submit', onClick: () => form.element.requestSubmit()})
-            ]
-        });
-    }
-
-    _showGroupInfoModal() {
-        const {activeThoughtId, thoughts} = this.dataStore.state;
-        const group = thoughts[activeThoughtId];
-        if (!group || group.type !== 'group') {
-            this.ui.showToast('Not a group thought.', 'error');
-            return;
-        }
-        const form = new Component('form');
-        form.add(
-            new Component('label', {textContent: 'Group Name:'}),
-            new Component('input', {name: 'name', value: group.name, readOnly: true}),
-            new Component('label', {textContent: 'Group ID:'}),
-            new Component('input', {name: 'id', value: group.id, readOnly: true}),
-            new Component('label', {textContent: 'Secret Key (Base64):'}),
-            new Component('input', {name: 'key', value: group.secretKey, readOnly: true, type: 'text'})
-        );
-        this.ui.showModal({
-            title: 'Group Info',
-            body: form,
-            buttons: [
-                new Button({textContent: 'Close', className: 'secondary', onClick: () => this.ui.hideModal()})
-            ]
-        });
-    }
-
-    _showRelaysModal() {
-        const {relays} = this.dataStore.state;
-        const body = new Component('div');
-        const list = new Component('ul', {
-            style: {
-                listStyle: 'none',
-                padding: 0,
-                maxHeight: '150px',
-                overflowY: 'auto',
-                borderBottom: '1px solid var(--border)',
-                paddingBottom: '10px',
-                marginBottom: '10px'
-            }
-        });
-        relays.forEach(url => {
-            const listItem = new Component('li', {
-                style: {
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '6px 0'
-                }
-            });
-            listItem.add(new Component('span', {
-                textContent: Utils.escapeHtml(url),
-                style: {
-                    flex: 1,
-                    marginLeft: '8px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                }
-            }));
-            listItem.add(new Button({
-                textContent: 'Remove',
-                className: 'danger',
-                onClick: () => this.handleAction('remove-relay', url)
-            }));
-            list.add(listItem);
-        });
-        const form = new Component('form', {
-            onsubmit: e => {
-                e.preventDefault();
-                this.handleAction('add-relay', new FormData(e.target));
-                e.target.reset();
-            }
-        });
-        form.add(new Component('label', {textContent: 'Add Relay:'}), new Component('input', {
-            name: 'url',
-            placeholder: 'wss://...'
-        }), new Button({textContent: 'Add', type: 'submit'}));
-        body.add(list, form);
-        this.ui.showModal({
-            title: 'Manage Relays',
-            body,
-            buttons: [new Button({
-                textContent: 'Close',
-                className: 'secondary',
-                onClick: () => this.ui.hideModal()
-            })]
-        });
-    }
-
-    showModal(name) {
-        const modalDispatch = {
-            'profile': this._showProfileModal,
-            'createGroup': this._showCreateGroupModal,
-            'joinGroup': this._showJoinGroupModal,
-            'createDm': this._showCreateDmModal,
-            'groupInfo': this._showGroupInfoModal,
-            'relays': this._showRelaysModal,
-        };
-        const handler = modalDispatch[name];
-        if (handler) {
-            handler.call(this);
-        } else if (name !== 'identity') {
-            Logger.warn(`Unknown modal type: ${name}`);
-        }
-    }
 }
 
 document.addEventListener('DOMContentLoaded', () => new App());
