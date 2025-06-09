@@ -56,7 +56,7 @@ export class Nostr extends EventEmitter {
         });
     }
 
-    subscribe(id, filters) {
+    subscribe(id, filters) { // Removed opts from signature as it's not used
         this.subs.get(id)?.unsub();
 
         const currentRelays = this.dataStore.state.relays;
@@ -77,7 +77,7 @@ export class Nostr extends EventEmitter {
                 }
                 this.processNostrEvent(event, id);
             },
-            oneose: () => {},
+            oneose: () => {}, // Basic EOSE handler
             onclose: (reason) => Logger.warn(`Subscription ${id} closed: ${reason}`),
         });
         this.subs.set(id, sub);
@@ -92,7 +92,10 @@ export class Nostr extends EventEmitter {
         if (currentRelays.length === 0) throw new Error('No relays available for publishing.');
 
         try {
-            await Promise.any(this.pool.publish(currentRelays, signedEvent));
+            // SimplePool.publish returns array of promises. Promise.any needs this.
+            const results = await Promise.any(this.pool.publish(currentRelays, signedEvent));
+            // Ensure results is not empty and at least one success, though Promise.any handles the all-reject case.
+            // For now, if Promise.any resolves, we consider it a success.
             return signedEvent;
         } catch (err) {
             Logger.error('Publish failed on all relays:', err);
@@ -101,12 +104,7 @@ export class Nostr extends EventEmitter {
     }
 
     subscribeToCoreEvents() {
-        const currentRelays = this.dataStore.state.relays;
-        if (currentRelays.length === 0) {
-            Logger.warn('Not subscribing to core events: No relays available.');
-            return;
-        }
-        this.subscribe('public', {kinds: [1]}, { onevent(event) {} });
+        this.subscribe('public', [{kinds: [1]}], { onevent(event) {} }); // Wrapped filter in array, options still passed but ignored by current subscribe
         const {identity} = this.dataStore.state;
         if (identity.pk) {
             const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60);
@@ -118,8 +116,7 @@ export class Nostr extends EventEmitter {
 
     resubscribeToGroups() {
         const gids = Object.values(this.dataStore.state.thoughts).filter(c => c.type === 'group').map(c => c.id);
-        const currentRelays = this.dataStore.state.relays;
-        if (gids.length > 0 && currentRelays.length > 0) {
+        if (gids.length > 0) {
             const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60);
             this.subscribe('groups', [{
                 kinds: [41],
@@ -206,7 +203,7 @@ export class Nostr extends EventEmitter {
                     if (subId === 'public' || subId.startsWith('historical-public')) {
                         thoughtId = 'public';
                     } else {
-                        return;
+                        return; // Ignore non-public kind 1 notes not from a public-specific subscription
                     }
                     break;
                 case 4:
@@ -225,35 +222,40 @@ export class Nostr extends EventEmitter {
                                 pubkey: thoughtId, unread: 0, lastEventTimestamp: Utils.now()
                             });
                             await this.dataStore.saveThoughts();
-                            this.fetchProfile(thoughtId);
+                            this.fetchProfile(thoughtId); // Fetch profile of new DM partner
                         }
                     } catch (err) {
-                        Logger.warn(`Failed to decrypt DM for ${thoughtId}:`, err);
+                        Logger.warn(`Failed to decrypt DM for ${thoughtId}: ${err.message}. Event ID: ${event.id}`);
                         return;
                     }
                     break;
-                case 41:
+                case 41: // Group Message
                     const groupTag = Utils.findTag(event, 'g');
-                    if (!groupTag) return;
+                    if (!groupTag) return; // Not a valid group message
                     thoughtId = groupTag;
                     const group = this.dataStore.state.thoughts[thoughtId];
-                    if (!group?.secretKey) return;
+                    if (!group?.secretKey) {
+                        Logger.warn(`No secret key for group ${thoughtId}. Cannot decrypt. Event ID: ${event.id}`);
+                        return;
+                    }
                     try {
                         content = await Utils.crypto.aesDecrypt(event.content, group.secretKey);
                     } catch (err) {
-                        Logger.warn(`Failed to decrypt group message for ${thoughtId}:`, err);
+                        Logger.warn(`Failed to decrypt group message for ${thoughtId}: ${err.message}. Event ID: ${event.id}`);
                         return;
                     }
                     break;
                 default:
+                    Logger.log(`Received unhandled event kind: ${event.kind}`);
                     return;
             }
 
-            if (thoughtId) {
-                await this.processMessage({...event, content}, thoughtId);
+            if (thoughtId && content !== undefined) { // Ensure content is available (decrypted)
+                // Pass the original event object but with potentially decrypted content
+                await this.processMessage({...event, content: content}, thoughtId);
             }
         } catch (err) {
-            Logger.error('Error processing Nostr event:', err);
+            Logger.error('Error processing Nostr event:', err, event);
         }
     }
 
@@ -267,15 +269,18 @@ export class Nostr extends EventEmitter {
                 messages[thoughtId] = thoughtMessages;
             }
 
-            if (thoughtMessages.some(m => m.id === msg.id)) return;
+            if (thoughtMessages.some(m => m.id === msg.id)) return; // Already processed
 
             thoughtMessages.push(msg);
 
+            // Keep only the latest MESSAGE_LIMIT messages
             if (thoughtMessages.length > MESSAGE_LIMIT) {
-                thoughtMessages.shift();
+                thoughtMessages.sort((a, b) => a.created_at - b.created_at); // Ensure sorted before splice
+                thoughtMessages.splice(0, thoughtMessages.length - MESSAGE_LIMIT);
+            } else {
+                thoughtMessages.sort((a, b) => a.created_at - b.created_at);
             }
 
-            thoughtMessages.sort((a, b) => a.created_at - b.created_at);
 
             const thought = this.dataStore.state.thoughts[thoughtId];
             if (thought) {
@@ -285,16 +290,20 @@ export class Nostr extends EventEmitter {
                 }
             }
 
+            // Only save messages for non-public thoughts to localforage
             if (thoughtId !== 'public') {
                 await this.dataStore.saveMessages(thoughtId);
             }
 
             this.dataStore.emit(`messages:${thoughtId}:updated`, thoughtMessages);
-            this.dataStore.emitStateUpdated();
+            this.dataStore.emitStateUpdated(); // General state update for unread counts, etc.
 
-            this.fetchProfile(msg.pubkey);
+            // Fetch profile of the message sender if not already known/recently updated
+            if (msg.pubkey) {
+                this.fetchProfile(msg.pubkey);
+            }
         } catch (err) {
-            Logger.error(`Error processing message for ${thoughtId}:`, err);
+            Logger.error(`Error processing message for ${thoughtId}:`, err, msg);
         }
     }
 
@@ -317,7 +326,7 @@ export class Nostr extends EventEmitter {
                 await this.dataStore.saveProfiles();
             }
         } catch (err) {
-            Logger.warn('Error parsing profile event:', err);
+            Logger.warn('Error parsing profile event:', err, event.content);
         }
     }
 }

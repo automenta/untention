@@ -1,7 +1,34 @@
 export const Utils = {
     now: () => Math.floor(Date.now() / 1000),
     bytesToHex: bytes => bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), ''),
-    hexToBytes: hex => new Uint8Array(hex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []),
+    hexToBytes: hex => {
+        if (!hex) return new Uint8Array();
+        const matched = hex.match(/.{1,2}/g);
+        if (!matched) return new Uint8Array();
+
+        const bytes = [];
+        for (const byteHex of matched) {
+            if (byteHex.length > 2 || !/^[0-9a-fA-F]+$/.test(byteHex)) {
+                 // This check is for characters like 'xx' or if a segment is too long
+                 // However, parseInt would handle 'xx' as NaN if not for the regex.
+                 // The main issue is parseInt('6g',16) -> 6. We need to ensure both chars are hex if length is 2.
+                 // Or if length is 1, it must be a hex char.
+                throw new Error('Invalid hex string');
+            }
+            const byte = parseInt(byteHex, 16);
+            if (isNaN(byte)) { // Should be caught by regex, but as a safeguard
+                throw new Error('Invalid hex string');
+            }
+            // Additional check for partial hex like 'g' or '0g' if parseInt was lenient
+            if (byteHex.length === 2 && (byteHex[0] > 'f' || byteHex[1] > 'f') && !/^[0-9a-fA-F]{1,2}$/.test(byteHex)) {
+                 // A bit redundant due to the regex above, but shows intent for stricter per-byte validation.
+                 // The primary fix is ensuring parseInt doesn't misinterpret.
+                 // The initial regex /^[0-9a-fA-F]+$/ on byteHex is key.
+            }
+            bytes.push(byte);
+        }
+        return new Uint8Array(bytes);
+    },
     uint8ArrayToBase64: arr => btoa(String.fromCharCode(...arr)),
     base64ToUint8Array: s => new Uint8Array(atob(s).split("").map(c => c.charCodeAt(0))),
     shortenPubkey: p => p ? `${p.slice(0, 8)}...${p.slice(-4)}` : '?',
@@ -16,7 +43,7 @@ export const Utils = {
         };
         return text?.replace(/[&<>"']/g, char => map[char]) ?? '';
     },
-    findTag: (e, k) => e.tags.find(t => t[0] === k)?.[1],
+    findTag: (e, k) => e?.tags?.find(t => t[0] === k)?.[1],
     getUserColor: p => {
         const c = ['#4dabf7', '#20c997', '#f06595', '#cc5de8', '#5c7cfa', '#fcc419', '#ff8787', '#74b816'];
         return c[p ? Array.from(p).reduce((acc, char) => acc + char.charCodeAt(0), 0) % c.length : 0];
@@ -43,7 +70,7 @@ export const Utils = {
                 }, key, Utils.base64ToUint8Array(cipherTextBase64));
                 return new TextDecoder().decode(plainText);
             } catch (err) {
-                Logger.error('AES decryption failed:', err);
+                // Logger.error('AES decryption failed:', err); // Removed for minimal side effects
                 throw err;
             }
         },

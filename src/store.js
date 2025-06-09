@@ -42,7 +42,7 @@ export class Data extends EventEmitter {
                     this.state.identity.pk = getPublicKey(this.state.identity.sk);
                 } catch (err) {
                     Logger.error("Failed to load identity:", err);
-                    await this.clearIdentity();
+                    await this.resetApplicationData();
                 }
             }
             this.state.thoughts = thoughtsData && typeof thoughtsData === 'object' ? thoughtsData : {};
@@ -65,7 +65,7 @@ export class Data extends EventEmitter {
             this.emitStateUpdated();
         } catch (err) {
             Logger.error('DataStore load failed:', err);
-            await this.clearIdentity();
+            await this.resetApplicationData();
             this.emitStateUpdated();
         }
     }
@@ -90,6 +90,7 @@ export class Data extends EventEmitter {
             await localforage.setItem('identity_v2', {skHex: Utils.bytesToHex(sk)});
         } catch (err) {
             Logger.error('Failed to save identity:', err);
+            throw err;
         }
     }
 
@@ -98,6 +99,7 @@ export class Data extends EventEmitter {
             await localforage.setItem('thoughts_v3', this.state.thoughts);
         } catch (err) {
             Logger.error('Failed to save thoughts:', err);
+            throw err;
         }
     }
 
@@ -106,6 +108,7 @@ export class Data extends EventEmitter {
             await localforage.setItem('profiles_v2', this.state.profiles);
         } catch (err) {
             Logger.error('Failed to save profiles:', err);
+            throw err;
         }
     }
 
@@ -114,6 +117,7 @@ export class Data extends EventEmitter {
             await localforage.setItem('activeThoughtId_v3', this.state.activeThoughtId);
         } catch (err) {
             Logger.error('Failed to save activeThoughtId:', err);
+            throw err;
         }
     }
 
@@ -122,6 +126,7 @@ export class Data extends EventEmitter {
             await localforage.setItem('relays_v2', this.state.relays);
         } catch (err) {
             Logger.error('Failed to save relays:', err);
+            throw err;
         }
     }
 
@@ -131,11 +136,12 @@ export class Data extends EventEmitter {
                 await localforage.setItem(`messages_${tId}`, this.state.messages[tId]);
             } catch (err) {
                 Logger.error(`Failed to save messages for ${tId}:`, err);
+                throw err;
             }
         }
     }
 
-    async clearIdentity() {
+    async resetApplicationData() {
         try {
             const keys = await localforage.keys();
             await Promise.all(keys.map(key => {
@@ -149,7 +155,7 @@ export class Data extends EventEmitter {
                 return Promise.resolve();
             }));
         } catch (err) {
-            Logger.error('Failed to get keys or remove items during clearIdentity:', err);
+            Logger.error('Failed to get keys or remove items during resetApplicationData:', err);
         }
         this.setState(state => {
             state.identity = {sk: null, pk: null, profile: null};

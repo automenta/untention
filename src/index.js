@@ -60,24 +60,34 @@ class App {
     async selectThought(id) {
         this.ui.setLoading(true);
         try {
-            const {activeThoughtId, thoughts} = this.dataStore.state;
+            const currentActiveThoughtId = this.dataStore.state.activeThoughtId;
+            const thoughts = this.dataStore.state.thoughts;
             const newActiveThoughtId = thoughts[id] ? id : 'public';
 
-            if (activeThoughtId !== newActiveThoughtId) {
-                this.dataStore.setState(s => {
-                    s.activeThoughtId = newActiveThoughtId;
-                    const t = s.thoughts[s.activeThoughtId];
-                    if (t?.unread > 0) t.unread = 0;
-                });
+            const thoughtToUpdate = thoughts[newActiveThoughtId];
+            let unreadActuallyChanged = false;
+
+            if (thoughtToUpdate && thoughtToUpdate.unread > 0) {
+                unreadActuallyChanged = true;
+            }
+
+            this.dataStore.setState(s => {
+                s.activeThoughtId = newActiveThoughtId;
+                if (s.thoughts[newActiveThoughtId]) {
+                    s.thoughts[newActiveThoughtId].unread = 0;
+                }
+            });
+
+            if (currentActiveThoughtId !== newActiveThoughtId) {
                 await this.dataStore.saveActiveThoughtId();
+            }
+            if (unreadActuallyChanged) {
+                await this.dataStore.saveThoughts();
+            }
+
+            if (currentActiveThoughtId !== newActiveThoughtId) {
                 await this.dataStore.loadMessages(newActiveThoughtId);
                 await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[newActiveThoughtId]);
-            } else {
-                this.dataStore.setState(s => {
-                    const t = s.thoughts[s.activeThoughtId];
-                    if (t?.unread > 0) t.unread = 0;
-                });
-                await this.dataStore.saveActiveThoughtId();
             }
         } catch (e) {
             Logger.error(`Error selecting thought ${id}:`, e);
@@ -116,8 +126,9 @@ class App {
                 delete s.messages[activeThoughtId];
             });
             await Promise.all([localforage.removeItem(`messages_${activeThoughtId}`), this.dataStore.saveThoughts()]);
-            this.selectThought('public');
+            await this.selectThought('public');
             this.ui.showToast('Thought removed.', 'info');
+            this.ui.showToast('Switched to Public chat.', 'info');
         } catch (e) {
             Logger.error(`Error leaving thought ${activeThoughtId}:`, e);
             this.ui.showToast(`Failed to remove thought: ${e.message || 'Unknown error'}`, 'error');
@@ -312,9 +323,18 @@ class App {
         this.ui.setLoading(true);
         try {
             const newId = crypto.randomUUID();
+            let noteName = 'New Note';
+            const existingNames = new Set(Object.values(this.dataStore.state.thoughts).filter(t => t.type === 'note').map(t => t.name));
+            if (existingNames.has(noteName)) {
+                let i = 1;
+                while (existingNames.has(`New Note ${i}`)) {
+                    i++;
+                }
+                noteName = `New Note ${i}`;
+            }
             const newNote = {
                 id: newId,
-                name: 'New Note',
+                name: noteName,
                 type: 'note',
                 body: '',
                 lastEventTimestamp: Utils.now(),
@@ -479,6 +499,8 @@ class App {
         }
         const form = new Component('form');
         form.add(
+            new Component('label', {textContent: 'Group Name:'}),
+            new Component('input', {name: 'name', value: group.name, readOnly: true}),
             new Component('label', {textContent: 'Group ID:'}),
             new Component('input', {name: 'id', value: group.id, readOnly: true}),
             new Component('label', {textContent: 'Secret Key (Base64):'}),

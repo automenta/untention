@@ -153,17 +153,60 @@ export class MainView extends Component {
         this.app.dataStore.on('state:updated', s => this.update(s));
     }
 
-    update({activeThoughtId, thoughts, profiles, identity} = {}) {
-        const thought = thoughts?.[activeThoughtId];
-        if (!thought) {
-            this.headerName.setContent('No Thought Selected');
-            this.messages.setContent('<div class="message system"><div class="message-content">Select a thought to view messages.</div></div>');
-            this.inputForm.show(false);
-            this.noteEditorContainer.show(false); // Also hide note editor if no thought selected
-            this.previousThoughtId = null;
+    _handleNoThoughtSelected() {
+        this.headerName.setContent('No Thought Selected');
+        this.messages.setContent('<div class="message system"><div class="message-content">Select a thought to view messages.</div></div>');
+        this.inputForm.show(false);
+        this.noteEditorContainer.show(false);
+        this.previousThoughtId = null;
+        this.messageRenderQueue = [];
+        this.renderedMessageIds.clear();
+        this.renderScheduled = false;
+    }
+
+    _switchToNoteView(thought) {
+        this.messages.show(false);
+        this.noteEditorContainer.show(true);
+        this.noteTitleInput.element.value = thought.name || '';
+        this.noteBodyTextarea.element.value = thought.body || '';
+
+        // Clear any pending messages from other views
+        this.messageRenderQueue = [];
+        this.renderedMessageIds.clear();
+        // If messages view had a placeholder, clear it
+        if (this.messages.element.firstChild && this.messages.element.firstChild.classList.contains('system')) {
+            this.messages.setContent('');
+        }
+    }
+
+    _switchToMessageView(activeThoughtId) {
+        this.messages.show(true);
+        this.noteEditorContainer.show(false);
+
+        if (this.previousThoughtId !== activeThoughtId) {
+            if (this.previousThoughtId) {
+                this.app.dataStore.off(`messages:${this.previousThoughtId}:updated`, this.handleMessagesUpdated);
+            }
+            this.app.dataStore.on(`messages:${activeThoughtId}:updated`, this.handleMessagesUpdated);
+
+            this.messages.setContent(''); // Clear previous messages
             this.messageRenderQueue = [];
             this.renderedMessageIds.clear();
-            this.renderScheduled = false;
+
+            const currentMessages = this.app.dataStore.state.messages[activeThoughtId] || [];
+            const initialMessagesToRender = currentMessages.slice(-this.DISPLAY_MESSAGE_LIMIT);
+            this.messageRenderQueue.push(...initialMessagesToRender);
+            initialMessagesToRender.forEach(msg => this.renderedMessageIds.add(msg.id));
+
+            this.scheduleRender();
+        }
+    }
+
+    update({activeThoughtId, thoughts, profiles, identity} = {}) {
+        const thought = thoughts?.[activeThoughtId];
+
+        if (!thought) {
+            this._handleNoThoughtSelected();
             return;
         }
 
@@ -171,36 +214,9 @@ export class MainView extends Component {
         this.inputForm.show(!!identity.sk && thought.type !== 'note');
 
         if (thought.type === 'note') {
-            this.messages.show(false);
-            this.noteEditorContainer.show(true);
-            this.noteTitleInput.element.value = thought.name || '';
-            this.noteBodyTextarea.element.value = thought.body || '';
-
-            this.messageRenderQueue = [];
-            this.renderedMessageIds.clear();
-            if (this.messages.element.firstChild && this.messages.element.firstChild.classList.contains('system')) {
-                this.messages.setContent('');
-            }
+            this._switchToNoteView(thought);
         } else {
-            this.messages.show(true);
-            this.noteEditorContainer.show(false);
-            if (this.previousThoughtId !== activeThoughtId) {
-                if (this.previousThoughtId) {
-                    this.app.dataStore.off(`messages:${this.previousThoughtId}:updated`, this.handleMessagesUpdated);
-                }
-                this.app.dataStore.on(`messages:${activeThoughtId}:updated`, this.handleMessagesUpdated);
-
-                this.messages.setContent('');
-                this.messageRenderQueue = [];
-                this.renderedMessageIds.clear();
-
-                const currentMessages = this.app.dataStore.state.messages[activeThoughtId] || [];
-                const initialMessagesToRender = currentMessages.slice(-this.DISPLAY_MESSAGE_LIMIT);
-                this.messageRenderQueue.push(...initialMessagesToRender);
-                initialMessagesToRender.forEach(msg => this.renderedMessageIds.add(msg.id));
-
-                this.scheduleRender();
-            }
+            this._switchToMessageView(activeThoughtId);
         }
 
         this.previousThoughtId = activeThoughtId;
@@ -236,8 +252,7 @@ export class MainView extends Component {
         this.headerName.setContent(Utils.escapeHtml(name || 'Unknown'));
         this.headerActions.setContent('');
 
-        if (thought.type === 'note') {
-        } else if (thought.type === 'group') {
+        if (thought.type === 'group') {
             this.headerActions.add(
                 new Button({
                     textContent: 'Info',
