@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, vitest } from 'vitest';
+import DOMPurify from 'dompurify';
 import { MessageListView } from '../../src/components.js';
 import { Utils } from '../../src/utils.js'; // For Utils.now() if used, and other utils
 
@@ -71,12 +72,12 @@ describe('MessageListView', () => {
 
         // Check first message (from user2)
         expect(messageElements[0].querySelector('.message-sender').textContent).toBe('User Two');
-        expect(messageElements[0].querySelector('.message-text').textContent).toBe('Hello');
+        expect(messageElements[0].querySelector('.message-text').innerHTML).toBe('Hello'); // Changed to innerHTML
         expect(messageElements[0].classList.contains('self')).toBe(false);
 
         // Check second message (from user1 - self)
         expect(messageElements[1].querySelector('.message-sender').textContent).toBe('You'); // 'You' for self
-        expect(messageElements[1].querySelector('.message-text').textContent).toBe('Hi there!');
+        expect(messageElements[1].querySelector('.message-text').innerHTML).toBe('Hi there!'); // Changed to innerHTML
         expect(messageElements[1].classList.contains('self')).toBe(true);
     });
 
@@ -105,7 +106,7 @@ describe('MessageListView', () => {
         // requestAnimationFrame mock will execute the render immediately in this setup
         const messageElements = view.messagesContainer.element.querySelectorAll('.message:not(.system)');
         expect(messageElements.length).toBe(1);
-        expect(messageElements[0].querySelector('.message-text').textContent).toBe('New message');
+        expect(messageElements[0].querySelector('.message-text').innerHTML).toBe('New message'); // Changed to innerHTML
     });
 
     it('should respect DISPLAY_MESSAGE_LIMIT', () => {
@@ -151,5 +152,30 @@ describe('MessageListView', () => {
         view.update(activeThoughtId); // Subscribes
         view.destroy();
         expect(mockDataStore.off).toHaveBeenCalledWith(`messages:${activeThoughtId}:updated`, view._handleMessagesUpdated);
+    });
+
+    it('should correctly render HTML content from a message', () => {
+        const messages = [
+            { id: 'msg-html', content: '<p>Hello <strong>World</strong></p>', pubkey: 'user2', created_at: 1678886400 },
+        ];
+        mockDataStore.state.messages[activeThoughtId] = messages;
+        view.update(activeThoughtId);
+        const messageElement = view.messagesContainer.element.querySelector('[data-id="msg-html"] .message-text');
+        expect(messageElement.innerHTML).toBe('<p>Hello <strong>World</strong></p>');
+    });
+
+    it('should sanitize potentially malicious HTML content', () => {
+        const messages = [
+            { id: 'msg-xss', content: '<p>Safe <script>alert("XSS")</script> unsafe</p><img src="x" onerror="alert(\'XSS\')">', pubkey: 'user2', created_at: 1678886400 },
+        ];
+        mockDataStore.state.messages[activeThoughtId] = messages;
+        // Spy on DOMPurify.sanitize to ensure it's called
+        const sanitizeSpy = vi.spyOn(DOMPurify, 'sanitize');
+        view.update(activeThoughtId);
+        const messageElement = view.messagesContainer.element.querySelector('[data-id="msg-xss"] .message-text');
+        expect(sanitizeSpy).toHaveBeenCalledWith(messages[0].content);
+        // Check that script tag is removed and onerror is neutralized (DOMPurify typically removes script tags and sanitizes event handlers)
+        expect(messageElement.innerHTML).toBe('<p>Safe  unsafe</p><img src="x">'); // Exact output depends on DOMPurify's default config
+        sanitizeSpy.mockRestore();
     });
 });

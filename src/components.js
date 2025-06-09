@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { Component, Button } from './ui.js';
 import { Utils } from './utils.js';
 
@@ -204,7 +205,7 @@ class MessageListView extends Component {
             const avatarSrc = p.picture ?? Utils.createAvatarSvg(senderName, msg.pubkey);
             const msgEl = new Component('div', {
                 className: `message ${isSelf ? 'self' : ''}`,
-                innerHTML: `<div class="message-avatar"><img class="avatar" src="${avatarSrc}" onerror="this.src='${Utils.createAvatarSvg(senderName, msg.pubkey)}'"></div><div class="message-content"><div class="message-header"><div class="message-sender" style="color: ${Utils.getUserColor(msg.pubkey)}">${Utils.escapeHtml(senderName)}</div><div class="message-time">${Utils.formatTime(msg.created_at)}</div></div><div class="message-text">${Utils.escapeHtml(msg.content || '')}</div></div>`
+                innerHTML: `<div class="message-avatar"><img class="avatar" src="${avatarSrc}" onerror="this.src='${Utils.createAvatarSvg(senderName, msg.pubkey)}'"></div><div class="message-content"><div class="message-header"><div class="message-sender" style="color: ${Utils.getUserColor(msg.pubkey)}">${Utils.escapeHtml(senderName)}</div><div class="message-time">${Utils.formatTime(msg.created_at)}</div></div><div class="message-text">${DOMPurify.sanitize(msg.content || '')}</div></div>`
             });
             msgEl.element.dataset.id = msg.id;
             fragment.appendChild(msgEl.element);
