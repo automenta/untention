@@ -58,19 +58,23 @@ export class ModalService {
                 modalInstance = new CreateDmModal(this.app);
                 break;
             case 'groupInfo':
-                // GroupInfoModal expects specific group data
-                const groupData = data.group || {}; // Caller should provide group data
-                if (!groupData.id) { // Attempt to get from active thought if not provided
-                    const activeGroup = this.dataStore.state.thoughts[this.dataStore.state.activeThoughtId];
-                    if (activeGroup && activeGroup.type === 'group') {
-                        modalInstance = new GroupInfoModal(this.app, activeGroup);
+                let groupDataForModal = data.group; // Attempt to get from provided data first
+                // If not provided directly, or if it's an object without an id (incomplete)
+                if (!groupDataForModal || !groupDataForModal.id) {
+                    const activeThought = this.dataStore.state.thoughts[this.dataStore.state.activeThoughtId];
+                    if (activeThought && activeThought.type === 'group') {
+                        groupDataForModal = activeThought; // Fallback to active thought if it's a group
                     } else {
-                        Logger.error("ModalService: GroupInfo modal called without group data or active group.");
-                        this.app.ui.showToast("Cannot show group info: no group selected or data missing.", "error");
-                        return;
+                        groupDataForModal = null; // Explicitly nullify if no valid data found
                     }
+                }
+
+                if (groupDataForModal) { // Check if we ended up with valid group data
+                    modalInstance = new GroupInfoModal(this.app, groupDataForModal);
                 } else {
-                     modalInstance = new GroupInfoModal(this.app, groupData);
+                    Logger.error("ModalService: GroupInfo modal called without valid group data or active group.");
+                    this.app.ui.showToast("Cannot show group info: no group selected or data missing.", "error");
+                    return;
                 }
                 break;
             case 'relays':

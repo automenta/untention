@@ -58,35 +58,35 @@ export class Data extends EventEmitter {
             if (identityResult.status === 'fulfilled') {
                 identityData = identityResult.value;
             } else {
-                Logger.error(`Failed to load ${IDENTITY_KEY} from localforage:`, identityResult.reason);
+                Logger.errorWithContext('DataStore', `Failed to load ${IDENTITY_KEY} from localforage:`, identityResult.reason);
             }
 
             let thoughtsData = null;
             if (thoughtsResult.status === 'fulfilled') {
                 thoughtsData = thoughtsResult.value;
             } else {
-                Logger.error(`Failed to load ${THOUGHTS_KEY} from localforage:`, thoughtsResult.reason);
+                Logger.errorWithContext('DataStore', `Failed to load ${THOUGHTS_KEY} from localforage:`, thoughtsResult.reason);
             }
 
             let profilesData = null;
             if (profilesResult.status === 'fulfilled') {
                 profilesData = profilesResult.value;
             } else {
-                Logger.error(`Failed to load ${PROFILES_KEY} from localforage:`, profilesResult.reason);
+                Logger.errorWithContext('DataStore', `Failed to load ${PROFILES_KEY} from localforage:`, profilesResult.reason);
             }
 
             let activeThoughtIdData = null;
             if (activeThoughtIdResult.status === 'fulfilled') {
                 activeThoughtIdData = activeThoughtIdResult.value;
             } else {
-                Logger.error(`Failed to load ${ACTIVE_THOUGHT_ID_KEY} from localforage:`, activeThoughtIdResult.reason);
+                Logger.errorWithContext('DataStore', `Failed to load ${ACTIVE_THOUGHT_ID_KEY} from localforage:`, activeThoughtIdResult.reason);
             }
 
             let relaysData = null;
             if (relaysResult.status === 'fulfilled') {
                 relaysData = relaysResult.value;
             } else {
-                Logger.error(`Failed to load ${RELAYS_KEY} from localforage:`, relaysResult.reason);
+                Logger.errorWithContext('DataStore', `Failed to load ${RELAYS_KEY} from localforage:`, relaysResult.reason);
             }
 
             // This section of DataStore#load was significantly refactored in the previous subtask.
@@ -100,9 +100,9 @@ export class Data extends EventEmitter {
                     const skBytes = hexToBytes(identityResult.value.skHex); // Changed
                     this.state.identity.sk = skBytes;
                     this.state.identity.pk = getPublicKey(skBytes);
-                    Logger.info('Identity loaded and processed successfully.');
+                    Logger.infoWithContext('DataStore', 'Identity loaded and processed successfully.');
                 } catch (err) {
-                    Logger.error('Corrupted identity data in storage (e.g., invalid hex or key format):', err);
+                    Logger.errorWithContext('DataStore', 'Corrupted identity data in storage (e.g., invalid hex or key format):', err);
                     this.state.identity = {sk: null, pk: null, profile: null};
                 }
             } else {
@@ -116,7 +116,7 @@ export class Data extends EventEmitter {
                 if (loadedRelays.length > 0) {
                     this.state.relays = loadedRelays;
                 } else if (relaysResult.value.length > 0) {
-                     Logger.warn('Loaded relays were all invalid. User may need to reconfigure.');
+                     Logger.warnWithContext('DataStore', 'Loaded relays were all invalid. User may need to reconfigure.');
                      this.state.relays = [];
                 } else {
                     this.state.relays = [];
@@ -129,17 +129,17 @@ export class Data extends EventEmitter {
             this.state.thoughts = (thoughtsResult.status === 'fulfilled' && typeof thoughtsResult.value === 'object' && thoughtsResult.value)
                 ? thoughtsResult.value
                 : this._getDefaultState().thoughts;
-            if (thoughtsResult.status === 'rejected') Logger.warn('Failed to load thoughts_v3:', thoughtsResult.reason);
+            if (thoughtsResult.status === 'rejected') Logger.warnWithContext('DataStore', 'Failed to load thoughts_v3:', thoughtsResult.reason);
 
             this.state.profiles = (profilesResult.status === 'fulfilled' && typeof profilesResult.value === 'object' && profilesResult.value)
                 ? profilesResult.value
                 : this._getDefaultState().profiles;
-            if (profilesResult.status === 'rejected') Logger.warn('Failed to load profiles_v2:', profilesResult.reason);
+            if (profilesResult.status === 'rejected') Logger.warnWithContext('DataStore', 'Failed to load profiles_v2:', profilesResult.reason);
 
             this.state.activeThoughtId = (activeThoughtIdResult.status === 'fulfilled' && typeof activeThoughtIdResult.value === 'string')
                 ? activeThoughtIdResult.value
                 : this._getDefaultState().activeThoughtId;
-            if (activeThoughtIdResult.status === 'rejected') Logger.warn('Failed to load activeThoughtId_v3:', activeThoughtIdResult.reason);
+            if (activeThoughtIdResult.status === 'rejected') Logger.warnWithContext('DataStore', 'Failed to load activeThoughtId_v3:', activeThoughtIdResult.reason);
 
             if (!this.state.thoughts.public) {
                 this.state.thoughts.public = { id: 'public', name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0 };
@@ -152,11 +152,11 @@ export class Data extends EventEmitter {
 
             Object.values(this.state.thoughts).forEach(th => th.lastEventTimestamp ||= 0);
 
-            Logger.info('Data loading process completed.');
+            Logger.infoWithContext('DataStore', 'Data loading process completed.');
             this.emitStateUpdated();
 
         } catch (err) {
-            Logger.error('Critical error during DataStore load sequence. Resetting state to defaults and re-throwing.', err);
+            Logger.errorWithContext('DataStore', 'Critical error during DataStore load sequence. Resetting state to defaults and re-throwing.', err);
             this.state = this._getDefaultState();
             this.emitStateUpdated();
             throw new Error(`DataStore load failed critically: ${err.message}. Application state has been reset to defaults.`);
@@ -182,7 +182,7 @@ export class Data extends EventEmitter {
         try {
             await localforage.setItem(IDENTITY_KEY, {skHex: bytesToHex(sk)});
         } catch (err) {
-            Logger.error('Failed to save identity:', err);
+            Logger.errorWithContext('DataStore', 'Failed to save identity:', err);
             throw err;
         }
     }
@@ -191,7 +191,7 @@ export class Data extends EventEmitter {
         try {
             await localforage.setItem(THOUGHTS_KEY, this.state.thoughts);
         } catch (err) {
-            Logger.error('Failed to save thoughts:', err);
+            Logger.errorWithContext('DataStore', 'Failed to save thoughts:', err);
             throw err;
         }
     }
@@ -200,7 +200,7 @@ export class Data extends EventEmitter {
         try {
             await localforage.setItem(PROFILES_KEY, this.state.profiles);
         } catch (err) {
-            Logger.error('Failed to save profiles:', err);
+            Logger.errorWithContext('DataStore', 'Failed to save profiles:', err);
             throw err;
         }
     }
@@ -209,7 +209,7 @@ export class Data extends EventEmitter {
         try {
             await localforage.setItem(ACTIVE_THOUGHT_ID_KEY, this.state.activeThoughtId);
         } catch (err) {
-            Logger.error('Failed to save activeThoughtId:', err);
+            Logger.errorWithContext('DataStore', 'Failed to save activeThoughtId:', err);
             throw err;
         }
     }
@@ -218,7 +218,7 @@ export class Data extends EventEmitter {
         try {
             await localforage.setItem(RELAYS_KEY, this.state.relays);
         } catch (err) {
-            Logger.error('Failed to save relays:', err);
+            Logger.errorWithContext('DataStore', 'Failed to save relays:', err);
             throw err;
         }
     }
@@ -228,7 +228,7 @@ export class Data extends EventEmitter {
             try {
                 await localforage.setItem(`${MESSAGES_KEY_PREFIX}${tId}`, this.state.messages[tId]);
             } catch (err) {
-                Logger.error(`Failed to save messages for ${tId}:`, err);
+                Logger.errorWithContext('DataStore', `Failed to save messages for ${tId}:`, err);
                 throw err;
             }
         }
@@ -242,7 +242,7 @@ export class Data extends EventEmitter {
         if (currentRelays.includes(url)) {
             // Consider if this should be an error or a silent success.
             // For now, let's treat it as a success, no change needed.
-            Logger.info(`Relay ${url} already exists.`);
+            Logger.infoWithContext('DataStore', `Relay ${url} already exists.`);
             return;
         }
         const newRelays = [...currentRelays, url];
@@ -256,7 +256,7 @@ export class Data extends EventEmitter {
     async removeRelay(url) {
         const currentRelays = this.state.relays || [];
         if (!currentRelays.includes(url)) {
-            Logger.warn(`Attempted to remove non-existent relay: ${url}`);
+            Logger.warnWithContext('DataStore', `Attempted to remove non-existent relay: ${url}`);
             return; // Or throw an error, depending on desired strictness
         }
         const newRelays = currentRelays.filter(r => r !== url);
@@ -283,7 +283,7 @@ export class Data extends EventEmitter {
     }
 
     async resetApplicationData() {
-        Logger.info('Attempting to reset application data from storage.');
+        Logger.infoWithContext('DataStore', 'Attempting to reset application data from storage.');
         let resetCompletelySuccessful = true;
         try {
             const keys = await localforage.keys();
@@ -297,13 +297,13 @@ export class Data extends EventEmitter {
                 )
                 .map(key =>
                     localforage.removeItem(key).catch(err => {
-                        Logger.error(`Failed to remove item ${key} during reset:`, err);
+                        Logger.errorWithContext('DataStore', `Failed to remove item ${key} during reset:`, err);
                         resetCompletelySuccessful = false; // Mark that at least one item failed
                     })
                 );
             await Promise.all(removalPromises);
         } catch (err) {
-            Logger.error('Critical error during resetApplicationData (e.g., accessing localforage.keys):', err);
+            Logger.errorWithContext('DataStore', 'Critical error during resetApplicationData (e.g., accessing localforage.keys):', err);
             resetCompletelySuccessful = false;
             // This kind of error is severe, preventing even the attempt to remove items.
             throw new Error(`Critical failure during application data reset setup: ${err.message}`);
@@ -332,19 +332,19 @@ export class Data extends EventEmitter {
         if (!resetCompletelySuccessful) {
             throw new Error('Failed to completely reset all application data from storage. Some old data might remain.');
         }
-        Logger.info('Application data reset successfully completed (both in-memory and relevant storage items).');
+        Logger.infoWithContext('DataStore', 'Application data reset successfully completed (both in-memory and relevant storage items).');
     }
 
     async loadMessages(thoughtId) {
         if (!thoughtId) {
-            Logger.warn('loadMessages called with no thoughtId');
+            Logger.warnWithContext('DataStore', 'loadMessages called with no thoughtId');
             return; // Or throw an error if this case is unexpected
         }
         try {
             const messages = await localforage.getItem(`${MESSAGES_KEY_PREFIX}${thoughtId}`);
             this.state.messages[thoughtId] = Array.isArray(messages) ? messages : [];
         } catch (err) {
-            Logger.error(`Failed to load messages for thought ${thoughtId}:`, err);
+            Logger.errorWithContext('DataStore', `Failed to load messages for thought ${thoughtId}:`, err);
             this.state.messages[thoughtId] = []; // Ensure it's an empty array on error
             this.emit(`messages:${thoughtId}:updated`, this.state.messages[thoughtId]); // Update UI with empty
             throw err; // Re-throw so the caller (App.js) can show a toast

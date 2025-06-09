@@ -220,7 +220,7 @@ class CleanIdentityModal extends BaseModal {
                     const formData = new FormData(e.target);
                     // Call the app's method to handle the logic.
                     // App.saveIdentity is responsible for hiding the modal on success/failure via app.ui.
-                    this.app.saveIdentity(formData.get('privkey'));
+                    this.app.identityService.saveIdentity(formData.get('privkey'));
                 }
             });
             this._formComponent.add(

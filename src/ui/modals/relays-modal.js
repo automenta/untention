@@ -1,6 +1,7 @@
 import { BaseModal } from './modal.js';
 import { Component, Button } from '../ui.js';
-import { Utils } from '../../utils.js'; // Import Utils
+import { Utils } from '../../utils.js'; // Keep for Utils.escapeHtml if used
+import { validateRelayUrl } from '../../utils/nostr-utils.js';
 
 export class RelaysModal extends BaseModal {
     constructor(app, relaysList) {
@@ -82,10 +83,41 @@ export class RelaysModal extends BaseModal {
                     // Similar to remove, modal might need to be refreshed/reopened to see change.
                 }
             });
+            const urlInputComponent = new Component('input', { name: 'url', placeholder: 'wss://relay.example.com', required: true });
+            const addButtonComponent = new Button({ textContent: 'Add', type: 'submit', className: 'primary' });
+            const errorSpan = new Component('span', { className: 'error-message', style: { color: 'var(--danger)', fontSize: '12px', display: 'block', minHeight: '1em', marginTop: '4px' } });
+            errorSpan.element.textContent = ' '; // Initialize with a non-empty space to reserve height
+
+            const validateAndSetButton = () => {
+                const urlValue = urlInputComponent.element.value.trim();
+                if (!urlValue) {
+                    urlInputComponent.element.classList.remove('invalid'); // No "invalid" style for empty required field initially
+                    errorSpan.element.textContent = ' '; // No error message for empty
+                    addButtonComponent.element.disabled = true; // Disable button if field is empty and required
+                    return;
+                }
+                const isValid = validateRelayUrl(urlValue);
+                if (isValid) {
+                    urlInputComponent.element.classList.remove('invalid');
+                    errorSpan.element.textContent = ' ';
+                    addButtonComponent.element.disabled = false;
+                } else {
+                    urlInputComponent.element.classList.add('invalid');
+                    errorSpan.element.textContent = 'Invalid relay URL (must start with wss://)';
+                    addButtonComponent.element.disabled = true;
+                }
+            };
+
+            urlInputComponent.element.addEventListener('input', validateAndSetButton);
+
+            // Initial validation call to set button state
+            validateAndSetButton();
+
             form.add(
                 new Component('label', { textContent: 'Add Relay:' }),
-                new Component('input', { name: 'url', placeholder: 'wss://...', required: true }),
-                new Button({ textContent: 'Add', type: 'submit', className: 'primary' }) // Added primary class
+                urlInputComponent,
+                errorSpan, // Add the error message display element
+                addButtonComponent
             );
             this._contentComponent.add(form);
         }
