@@ -29,13 +29,51 @@ export class Data extends EventEmitter {
 
     async load() {
         try {
-            const [identityData, thoughtsData, profilesData, activeThoughtIdData, relaysData] = await Promise.all([
-                localforage.getItem('identity_v2').catch(() => null),
-                localforage.getItem('thoughts_v3').catch(() => null),
-                localforage.getItem('profiles_v2').catch(() => null),
-                localforage.getItem('activeThoughtId_v3').catch(() => null),
-                localforage.getItem('relays_v2').catch(() => null)
+            const results = await Promise.allSettled([
+                localforage.getItem('identity_v2'),
+                localforage.getItem('thoughts_v3'),
+                localforage.getItem('profiles_v2'),
+                localforage.getItem('activeThoughtId_v3'),
+                localforage.getItem('relays_v2')
             ]);
+
+            const [identityResult, thoughtsResult, profilesResult, activeThoughtIdResult, relaysResult] = results;
+
+            let identityData = null;
+            if (identityResult.status === 'fulfilled') {
+                identityData = identityResult.value;
+            } else {
+                Logger.error('Failed to load identity_v2 from localforage:', identityResult.reason);
+            }
+
+            let thoughtsData = null;
+            if (thoughtsResult.status === 'fulfilled') {
+                thoughtsData = thoughtsResult.value;
+            } else {
+                Logger.error('Failed to load thoughts_v3 from localforage:', thoughtsResult.reason);
+            }
+
+            let profilesData = null;
+            if (profilesResult.status === 'fulfilled') {
+                profilesData = profilesResult.value;
+            } else {
+                Logger.error('Failed to load profiles_v2 from localforage:', profilesResult.reason);
+            }
+
+            let activeThoughtIdData = null;
+            if (activeThoughtIdResult.status === 'fulfilled') {
+                activeThoughtIdData = activeThoughtIdResult.value;
+            } else {
+                Logger.error('Failed to load activeThoughtId_v3 from localforage:', activeThoughtIdResult.reason);
+            }
+
+            let relaysData = null;
+            if (relaysResult.status === 'fulfilled') {
+                relaysData = relaysResult.value;
+            } else {
+                Logger.error('Failed to load relays_v2 from localforage:', relaysResult.reason);
+            }
+
             if (identityData?.skHex) {
                 try {
                     this.state.identity.sk = Utils.hexToBytes(identityData.skHex);

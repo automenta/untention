@@ -243,7 +243,39 @@ describe('Nostr Class', () => {
       });
 
       await expect(nostr.publish({})).rejects.toThrow('Failed to publish event to any relay.');
-      expect(Logger.error).toHaveBeenCalledWith('Publish failed on all relays:', expect.any(AggregateError));
+      // Logger.error is called with different arguments depending on AggregateError or not
+      // This is tested by the actual src/nostr.js logic which differentiates.
+      // The key is that Logger.error is called.
+      expect(Logger.error).toHaveBeenCalled();
+    });
+
+    it('should throw, log, and re-throw if NostrTools.finalizeEvent fails', async () => {
+      const eventTemplate = { kind: 1, content: 'Test note', tags: [], created_at: Utils.now() };
+      const signingError = new Error('Signing failed');
+      NostrTools.finalizeEvent.mockImplementation(() => {
+        throw signingError;
+      });
+      const loggerSpy = vi.spyOn(Logger, 'error');
+
+      await expect(nostr.publish(eventTemplate)).rejects.toThrow(signingError);
+      expect(loggerSpy).toHaveBeenCalledWith('Failed to sign event:', signingError, eventTemplate);
+      loggerSpy.mockRestore();
+    });
+
+    it('should log AggregateError specifically if Promise.any rejects with it', async () => {
+        mockSimplePoolInstance.publish.mockImplementation((relays, event) => {
+            return relays.map(r => Promise.reject(new Error(`Relay ${r} failed`)));
+        });
+        const loggerSpy = vi.spyOn(Logger, 'error');
+        const eventTemplate = { kind: 1, content: 'Test content', tags: [], created_at: Utils.now() };
+
+        await expect(nostr.publish(eventTemplate)).rejects.toThrow('Failed to publish event to any relay.');
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+            'Publish failed on all relays (AggregateError):',
+            expect.arrayContaining([expect.any(Error)]) // Check for the array of errors
+        );
+        loggerSpy.mockRestore();
     });
   });
 
@@ -343,11 +375,92 @@ describe('Nostr Class', () => {
     });
 
     it('processNostrEvent should skip kind 41 if group or secretKey missing', async () => {
-        const event = { id: 'evGroup', kind: 41, content: 'content', tags: [['g', 'unknownGroup']] };
+        const event = { id: 'evGroup', kind: 41, content: 'content', tags: [['g', 'unknownGroup']], created_at: Utils.now(), pubkey: 'pk' };
         const processMsgSpy = vi.spyOn(nostr, 'processMessage');
         await nostr.processNostrEvent(event, 'groups');
         expect(processMsgSpy).not.toHaveBeenCalled();
+        expect(Logger.warn).toHaveBeenCalledWith(`No secret key for group unknownGroup. Cannot decrypt. Event ID: evGroup`);
     });
+
+    // --- Start of new error condition tests for processNostrEvent ---
+    describe('processNostrEvent - Decryption Error Handling', () => {
+        const userTestSk = new Uint8Array(32).fill(0xBB);
+        const userTestPk = `pk_for_${'bb'.repeat(32)}`;
+        const otherTestPk = 'otherTestPkForDecryptionErrors';
+        let processMessageSpy;
+        let loggerWarnSpy;
+
+        beforeEach(() => {
+            mockDataStoreInstance.state.identity.sk = userTestSk;
+            mockDataStoreInstance.state.identity.pk = userTestPk;
+            NostrTools.verifyEvent.mockReturnValue(true); // Assume events are valid unless specified
+            processMessageSpy = vi.spyOn(nostr, 'processMessage');
+            loggerWarnSpy = vi.spyOn(Logger, 'warn');
+        });
+
+        afterEach(() => {
+            loggerWarnSpy.mockRestore();
+        });
+
+        it('Kind 4 (DM) - should log warning and not process if nip04.decrypt fails', async () => {
+            const eventId = 'dmDecryptFailEvent';
+            const event = { id: eventId, kind: 4, pubkey: otherTestPk, content: 'encrypted', tags: [['p', userTestPk]], created_at: Utils.now() };
+            const decryptError = new Error('Decryption failed');
+            NostrTools.nip04.decrypt.mockRejectedValueOnce(decryptError); // Mocking global NostrTools
+
+            await nostr.processNostrEvent(event, 'dms');
+
+            expect(NostrTools.nip04.decrypt).toHaveBeenCalledWith(userTestSk, otherTestPk, 'encrypted');
+            expect(loggerWarnSpy).toHaveBeenCalledWith(`Failed to decrypt DM for ${otherTestPk}: ${decryptError.message}. Event ID: ${eventId}`);
+            expect(processMessageSpy).not.toHaveBeenCalled();
+        });
+
+        it('Kind 4 (DM) - should log warning and not process if sk is missing', async () => {
+            mockDataStoreInstance.state.identity.sk = null;
+            const eventId = 'dmMissingSkEvent';
+            const event = { id: eventId, kind: 4, pubkey: otherTestPk, content: 'encrypted', tags: [['p', userTestPk]], created_at: Utils.now() };
+
+            await nostr.processNostrEvent(event, 'dms');
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith(`Cannot decrypt DM: Secret key (sk) not available. Event ID: ${eventId}`);
+            expect(processMessageSpy).not.toHaveBeenCalled();
+        });
+
+        it('Kind 41 (Group Message) - should log warning and not process if aesDecrypt fails', async () => {
+            const groupId = 'groupDecryptFail';
+            const eventId = 'groupDecryptFailEvent';
+            const groupSecretKey = Utils.uint8ArrayToBase64(new Uint8Array(32).fill(0xDD));
+            mockDataStoreInstance.state.thoughts[groupId] = { id: groupId, type: 'group', secretKey: groupSecretKey, name: 'Test Group Decrypt Fail' };
+            const event = { id: eventId, kind: 41, content: 'encryptedGroupMessage', tags: [['g', groupId]], created_at: Utils.now(), pubkey: 'someSender' };
+            const decryptError = new Error('AES Decryption failed miserably');
+
+            // Mock Utils.crypto.aesDecrypt specifically for this test
+            const originalAesDecrypt = Utils.crypto.aesDecrypt;
+            Utils.crypto.aesDecrypt = vi.fn().mockRejectedValueOnce(decryptError);
+
+            await nostr.processNostrEvent(event, 'groups');
+
+            expect(Utils.crypto.aesDecrypt).toHaveBeenCalledWith('encryptedGroupMessage', groupSecretKey);
+            expect(loggerWarnSpy).toHaveBeenCalledWith(`Failed to decrypt group message for ${groupId}: ${decryptError.message}. Event ID: ${eventId}`);
+            expect(processMessageSpy).not.toHaveBeenCalled();
+
+            Utils.crypto.aesDecrypt = originalAesDecrypt; // Restore original
+        });
+
+        it('Kind 41 (Group Message) - should log warning and not process if secretKey for group is missing', async () => {
+            const groupId = 'groupMissingKey';
+            const eventId = 'groupMissingKeyEvent';
+            // Ensure group exists but without a secretKey
+            mockDataStoreInstance.state.thoughts[groupId] = { id: groupId, type: 'group', name: 'Test Group No Key' };
+            const event = { id: eventId, kind: 41, content: 'someContent', tags: [['g', groupId]], created_at: Utils.now(), pubkey: 'someSender' };
+
+            await nostr.processNostrEvent(event, 'groups');
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith(`No secret key for group ${groupId}. Cannot decrypt. Event ID: ${eventId}`);
+            expect(processMessageSpy).not.toHaveBeenCalled();
+        });
+    });
+    // --- End of new error condition tests for processNostrEvent ---
 
     it('processMessage should add message, update thought (for other user), and emit events', async () => {
       const thoughtId = 'dmWithOtherUser';

@@ -20,7 +20,12 @@ export class Nostr extends EventEmitter {
         const relays = this.dataStore.state.relays;
         if (relays.length === 0) {
             this.updateConnectionStatus('disconnected');
-            this.ui?.showToast('No relays configured. Please add relays.', 'warn');
+            const msg = 'No relays configured. Please add relays.';
+            if (this.ui) {
+                this.ui.showToast(msg, 'warn');
+            } else {
+                Logger.info(`UI not available: ${msg}`);
+            }
             return;
         }
 
@@ -28,7 +33,12 @@ export class Nostr extends EventEmitter {
         this.updateConnectionStatus('connecting');
         this.subscribeToCoreEvents();
         this.updateConnectionStatus('connected');
-        this.ui?.showToast(`Subscriptions sent to ${relays.length} relays.`, 'success');
+        const successMsg = `Subscriptions sent to ${relays.length} relays.`;
+        if (this.ui) {
+            this.ui.showToast(successMsg, 'success');
+        } else {
+            Logger.info(`UI not available: ${successMsg}`);
+        }
     }
 
     disconnect() {
@@ -56,7 +66,7 @@ export class Nostr extends EventEmitter {
         });
     }
 
-    subscribe(id, filters) { // Removed opts from signature as it's not used
+    subscribe(id, filters) {
         this.subs.get(id)?.unsub();
 
         const currentRelays = this.dataStore.state.relays;
@@ -77,7 +87,7 @@ export class Nostr extends EventEmitter {
                 }
                 this.processNostrEvent(event, id);
             },
-            oneose: () => {}, // Basic EOSE handler
+            oneose: () => {},
             onclose: (reason) => Logger.warn(`Subscription ${id} closed: ${reason}`),
         });
         this.subs.set(id, sub);
@@ -87,24 +97,32 @@ export class Nostr extends EventEmitter {
         const {sk} = this.dataStore.state.identity;
         if (!sk) throw new Error('Not logged in.');
 
-        const signedEvent = finalizeEvent(eventTemplate, sk);
+        let signedEvent;
+        try {
+            signedEvent = finalizeEvent(eventTemplate, sk);
+        } catch (err) {
+            Logger.error('Failed to sign event:', err, eventTemplate);
+            throw err;
+        }
+
         const currentRelays = this.dataStore.state.relays;
         if (currentRelays.length === 0) throw new Error('No relays available for publishing.');
 
         try {
-            // SimplePool.publish returns array of promises. Promise.any needs this.
             const results = await Promise.any(this.pool.publish(currentRelays, signedEvent));
-            // Ensure results is not empty and at least one success, though Promise.any handles the all-reject case.
-            // For now, if Promise.any resolves, we consider it a success.
             return signedEvent;
         } catch (err) {
-            Logger.error('Publish failed on all relays:', err);
+            if (err instanceof AggregateError) {
+                Logger.error('Publish failed on all relays (AggregateError):', err.errors);
+            } else {
+                Logger.error('Publish failed on all relays (Unknown Error):', err);
+            }
             throw new Error('Failed to publish event to any relay.');
         }
     }
 
     subscribeToCoreEvents() {
-        this.subscribe('public', [{kinds: [1]}], { onevent(event) {} }); // Wrapped filter in array, options still passed but ignored by current subscribe
+        this.subscribe('public', [{kinds: [1]}], { onevent(event) {} });
         const {identity} = this.dataStore.state;
         if (identity.pk) {
             const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60);
@@ -203,7 +221,7 @@ export class Nostr extends EventEmitter {
                     if (subId === 'public' || subId.startsWith('historical-public')) {
                         thoughtId = 'public';
                     } else {
-                        return; // Ignore non-public kind 1 notes not from a public-specific subscription
+                        return;
                     }
                     break;
                 case 4:
@@ -212,7 +230,7 @@ export class Nostr extends EventEmitter {
                     thoughtId = otherPubkey;
                     try {
                         if (!this.dataStore.state.identity.sk) {
-                            Logger.warn(`Cannot decrypt DM, identity not loaded. Event ID: ${event.id}`);
+                            Logger.warn(`Cannot decrypt DM: Secret key (sk) not available. Event ID: ${event.id}`);
                             return;
                         }
                         content = await nip04.decrypt(this.dataStore.state.identity.sk, otherPubkey, event.content);
@@ -222,16 +240,16 @@ export class Nostr extends EventEmitter {
                                 pubkey: thoughtId, unread: 0, lastEventTimestamp: Utils.now()
                             });
                             await this.dataStore.saveThoughts();
-                            this.fetchProfile(thoughtId); // Fetch profile of new DM partner
+                            this.fetchProfile(thoughtId);
                         }
                     } catch (err) {
                         Logger.warn(`Failed to decrypt DM for ${thoughtId}: ${err.message}. Event ID: ${event.id}`);
                         return;
                     }
                     break;
-                case 41: // Group Message
+                case 41:
                     const groupTag = Utils.findTag(event, 'g');
-                    if (!groupTag) return; // Not a valid group message
+                    if (!groupTag) return;
                     thoughtId = groupTag;
                     const group = this.dataStore.state.thoughts[thoughtId];
                     if (!group?.secretKey) {
@@ -250,8 +268,7 @@ export class Nostr extends EventEmitter {
                     return;
             }
 
-            if (thoughtId && content !== undefined) { // Ensure content is available (decrypted)
-                // Pass the original event object but with potentially decrypted content
+            if (thoughtId && content !== undefined) {
                 await this.processMessage({...event, content: content}, thoughtId);
             }
         } catch (err) {
@@ -269,13 +286,12 @@ export class Nostr extends EventEmitter {
                 messages[thoughtId] = thoughtMessages;
             }
 
-            if (thoughtMessages.some(m => m.id === msg.id)) return; // Already processed
+            if (thoughtMessages.some(m => m.id === msg.id)) return;
 
             thoughtMessages.push(msg);
 
-            // Keep only the latest MESSAGE_LIMIT messages
             if (thoughtMessages.length > MESSAGE_LIMIT) {
-                thoughtMessages.sort((a, b) => a.created_at - b.created_at); // Ensure sorted before splice
+                thoughtMessages.sort((a, b) => a.created_at - b.created_at);
                 thoughtMessages.splice(0, thoughtMessages.length - MESSAGE_LIMIT);
             } else {
                 thoughtMessages.sort((a, b) => a.created_at - b.created_at);
@@ -290,15 +306,13 @@ export class Nostr extends EventEmitter {
                 }
             }
 
-            // Only save messages for non-public thoughts to localforage
             if (thoughtId !== 'public') {
                 await this.dataStore.saveMessages(thoughtId);
             }
 
             this.dataStore.emit(`messages:${thoughtId}:updated`, thoughtMessages);
-            this.dataStore.emitStateUpdated(); // General state update for unread counts, etc.
+            this.dataStore.emitStateUpdated();
 
-            // Fetch profile of the message sender if not already known/recently updated
             if (msg.pubkey) {
                 this.fetchProfile(msg.pubkey);
             }

@@ -18,12 +18,12 @@ export class UIController {
 
     showModal({title, body, buttons}) {
         const modalContent = this.modal.element.querySelector('.modal-content');
-        modalContent.innerHTML = ''; // Clear previous content
+        modalContent.innerHTML = '';
 
         const titleElement = new Component('h3', {textContent: title}).element;
-        const bodyElement = body.element || body; // body could be a Component or a DOM element
+        const bodyElement = body.element || body;
         const buttonsContainer = new Component('div', {className: 'modal-buttons'});
-        buttons.forEach(button => buttonsContainer.add(button)); // Assuming Button extends Component
+        buttons.forEach(button => buttonsContainer.add(button));
 
         modalContent.append(titleElement, bodyElement, buttonsContainer.element);
         this.modal.element.classList.add('visible');
@@ -34,7 +34,16 @@ export class UIController {
     }
 
     showToast(message, type = 'info', duration = 3000) {
-        const toast = new Component('div', {className: 'toast', textContent: message});
+        const emojiMap = {
+            info: 'ℹ️',
+            success: '✅',
+            warn: '⚠️',
+            error: '❌',
+        };
+        const selectedEmoji = emojiMap[type] || emojiMap.info;
+        const fullMessage = `${selectedEmoji} ${message}`;
+
+        const toast = new Component('div', {className: 'toast', textContent: fullMessage});
         const toastTypeClass = {error: 'danger', success: 'success', warn: 'warning'}[type] || 'info';
         toast.element.style.background = `var(--${toastTypeClass === 'info' ? 'header-bg' : toastTypeClass})`;
         this.toastContainer.add(toast);
@@ -48,7 +57,8 @@ export class UIController {
     setLoading(isLoading) {
         document.getElementById('loading-indicator')?.remove();
         if (isLoading) {
-            document.body.insertAdjacentHTML('beforeend', '<div id="loading-indicator">Loading...</div>');
+            const loadingEmoji = '⏳';
+            document.body.insertAdjacentHTML('beforeend', `<div id="loading-indicator">${loadingEmoji} Loading...</div>`);
         }
     }
 }
