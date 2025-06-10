@@ -451,6 +451,10 @@ button.danger:hover:not(:disabled) {
     margin-bottom: 16px;
 }
 
+.modal-content input.invalid {
+    border-color: var(--danger);
+}
+
 .modal-buttons {
     display: flex;
     justify-content: flex-end;

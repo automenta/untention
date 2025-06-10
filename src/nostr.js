@@ -1,57 +1,78 @@
 const {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04, SimplePool} = NostrTools;
 
-import {EventEmitter, Logger, Utils} from "./utils.js";
+import { EventEmitter } from './event-emitter.js';
+import { Logger } from './logger.js';
+import { now } from './utils/time-utils.js';
+import { NostrEventProcessor } from './nostr-event-processor.js';
+
+const PROFILE_KIND = 0;
+const TEXT_NOTE_KIND = 1;
+const ENCRYPTED_DM_KIND = 4;
+const GROUP_CHAT_KIND = 41;
+
+const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
+const SEEN_EVENT_IDS_MAX_SIZE = 2000;
+const SEEN_EVENT_IDS_TRIM_THRESHOLD = 1500;
+const MESSAGE_LIMIT = 100;
+
 
 export class Nostr extends EventEmitter {
-    constructor(dataStore) {
+    constructor(dataStore, uiController) {
         super();
         this.dataStore = dataStore;
+        this.ui = uiController;
         this.pool = new SimplePool();
         this.subs = new Map();
         this.seenEventIds = new Set();
         this.connectionStatus = 'disconnected';
-        this.appController = null; // Will be set by AppController
+        this.eventProcessor = new NostrEventProcessor(dataStore, this, uiController);
     }
 
     connect() {
-        this.disconnect(); // Clear previous state
+        this.disconnect();
         const relays = this.dataStore.state.relays;
         if (relays.length === 0) {
             this.updateConnectionStatus('disconnected');
-            this.ui?.showToast('No relays configured. Please add relays.', 'warn');
+            const msg = 'No relays configured. Please add relays.';
+            if (this.ui) {
+                this.ui.showToast(msg, 'warn');
+            } else {
+                Logger.info(`UI not available: ${msg}`);
+            }
             return;
         }
 
-        this.pool = new SimplePool(); // Create a new pool for a new connection attempt
+        this.pool = new SimplePool();
         this.updateConnectionStatus('connecting');
         this.subscribeToCoreEvents();
-        this.updateConnectionStatus('connected'); // Immediately show connected, actual events will flow
-        this.ui?.showToast(`Subscriptions sent to ${relays.length} relays.`, 'success');
+        this.updateConnectionStatus('connected');
+        const successMsg = `Subscriptions sent to ${relays.length} relays.`;
+        if (this.ui) {
+            this.ui.showToast(successMsg, 'success');
+        } else {
+            Logger.info(`UI not available: ${successMsg}`);
+        }
     }
 
     disconnect() {
-        // Unsubscribe all active subscriptions first
         this.subs.forEach(sub => {
             if (sub && typeof sub.unsub === 'function') {
                 sub.unsub();
             } else {
-                Logger.warn('Attempted to unsub an invalid subscription object:', sub);
+                Logger.warnWithContext('Nostr', 'Attempted to unsub an invalid subscription object:', sub);
             }
         });
-        this.subs.clear(); // Clear the map after unsubscribing
+        this.subs.clear();
 
-        // Then close the pool connections
         if (this.pool) {
-            this.pool.close(this.dataStore.state.relays); // This closes WebSocket connections
+            this.pool.close(this.dataStore.state.relays);
         }
-
         this.updateConnectionStatus('disconnected');
     }
 
     updateConnectionStatus(status) {
         if (this.connectionStatus === status) return;
         this.connectionStatus = status;
-        Logger.log(`Relay status: ${status}`);
         this.emit('connection:status', {
             status,
             count: this.dataStore.state.relays.length
@@ -59,46 +80,33 @@ export class Nostr extends EventEmitter {
     }
 
     subscribe(id, filters) {
-        this.subs.get(id)?.unsub(); // Unsubscribe from previous subscription with the same ID
+        this.subs.get(id)?.unsub();
 
         const currentRelays = this.dataStore.state.relays;
         if (currentRelays.length === 0) {
-            Logger.warn(`Not subscribing to ${id}: No relays available.`);
+            Logger.warnWithContext('Nostr', `Not subscribing to ${id}: No relays available.`);
             return;
         }
 
-        Logger.log(`[Nostr] Subscribing to '${id}' with filters:`, filters);
-        // NEW LOGS: Detailed inspection of the filters array and its first element
-        Logger.log(`[Nostr] Type of filters: ${typeof filters}, isArray: ${Array.isArray(filters)}`);
-        if (Array.isArray(filters) && filters.length > 0) {
-            Logger.log(`[Nostr] Type of first filter element: ${typeof filters[0]}, isObject: ${typeof filters[0] === 'object' && filters[0] !== null}`);
-            try {
-                Logger.log(`[Nostr] JSON.stringify(filters[0]): ${JSON.stringify(filters[0])}`);
-            } catch (e) {
-                Logger.error(`[Nostr] Error stringifying filter:`, e);
-            }
-        }
-
-
         const sub = this.pool.subscribe(currentRelays, filters, {
             onevent: (event) => {
-                // THIS IS THE CRITICAL NEW LOG: It will fire for ANY event received by SimplePool for this sub.
-                //Logger.log(`[Nostr] === Event received by SimplePool for sub '${id}' ===`, event);
-
-                //Logger.log(`[Nostr] Raw event received for sub '${id}': kind=${event.kind}, id=${event.id.slice(0, 8)}...`);
+                Logger.debug('Nostr', `Received event for sub ${id}:`, event);
                 if (this.seenEventIds.has(event.id)) {
-                    //Logger.log(`[Nostr] Event ${event.id.slice(0, 8)}... for sub '${id}' skipped (already seen).`);
+                    Logger.debug('Nostr', `Event ${event.id} already seen, skipping.`);
                     return;
                 }
                 this.seenEventIds.add(event.id);
-                if (this.seenEventIds.size > 2000) {
+                if (this.seenEventIds.size > SEEN_EVENT_IDS_MAX_SIZE) {
                     const tempArray = Array.from(this.seenEventIds);
-                    this.seenEventIds = new Set(tempArray.slice(tempArray.length - 1500));
+                    this.seenEventIds = new Set(tempArray.slice(tempArray.length - SEEN_EVENT_IDS_TRIM_THRESHOLD));
+                    Logger.debug('Nostr', 'Pruned seenEventIds set.');
                 }
-                this.emit('event', {event, subId: id});
+                this.eventProcessor.processNostrEvent(event, id);
             },
-            oneose: () => Logger.log(`[EOSE] for sub '${id}'`),
-            onclose: (reason) => Logger.warn(`Subscription ${id} closed: ${reason}`),
+            oneose: () => {
+                Logger.debug('Nostr', `Subscription ${id} received EOSE.`);
+            },
+            onclose: (reason) => Logger.warnWithContext('Nostr', `Subscription ${id} closed: ${reason}`),
         });
         this.subs.set(id, sub);
     }
@@ -107,51 +115,53 @@ export class Nostr extends EventEmitter {
         const {sk} = this.dataStore.state.identity;
         if (!sk) throw new Error('Not logged in.');
 
-        const signedEvent = finalizeEvent(eventTemplate, sk);
+        let signedEvent;
+        try {
+            signedEvent = finalizeEvent(eventTemplate, sk);
+        } catch (err) {
+            Logger.errorWithContext('Nostr', 'Failed to sign event:', err, eventTemplate);
+            throw err;
+        }
+
         const currentRelays = this.dataStore.state.relays;
         if (currentRelays.length === 0) throw new Error('No relays available for publishing.');
 
         try {
-            await Promise.any(this.pool.publish(currentRelays, signedEvent));
+            Logger.debug('Nostr', 'Publishing event:', signedEvent);
+            const promises = this.pool.publish(currentRelays, signedEvent);
+            if (!Array.isArray(promises) || !promises.every(p => p instanceof Promise)) {
+                 Logger.errorWithContext('Nostr', 'this.pool.publish did not return an array of Promises. Mock issue?', promises);
+            }
+            const results = await Promise.any(promises);
+            Logger.debug('Nostr', 'Event published successfully to at least one relay:', results);
             return signedEvent;
-        } catch (e) {
-            Logger.error('Publish failed on all relays:', e);
+        } catch (err) {
+            if (err instanceof AggregateError) {
+                Logger.errorWithContext('Nostr', 'Publish failed on all relays (AggregateError):', err); // Log the err itself
+            } else {
+                Logger.errorWithContext('Nostr', 'Publish failed on all relays (Unknown Error):', err);
+            }
             throw new Error('Failed to publish event to any relay.');
         }
     }
 
     subscribeToCoreEvents() {
-        const currentRelays = this.dataStore.state.relays;
-        if (currentRelays.length === 0) {
-            Logger.warn('Not subscribing to core events: No relays available.');
-            return;
-        }
-        // These subscriptions are for real-time streaming of new events.
-        // Historical fetching is handled by fetchHistoricalMessages.
-        // Removed 'since' filter for public feed to align with working snippet's behavior
-        // and receive all new incoming messages regardless of age.
-        this.subscribe('public', {kinds: [1]},
-            {
-                onevent(event) {
-
-                }
-            });
+        this.subscribe('public', [{kinds: [TEXT_NOTE_KIND]}]);
         const {identity} = this.dataStore.state;
         if (identity.pk) {
-            const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60); // Events from the last 7 days for live stream
-            this.subscribe('dms', [{kinds: [4], '#p': [identity.pk], since: sevenDaysAgo}]);
-            this.subscribe('profile', [{kinds: [0], authors: [identity.pk], limit: 1}]);
+            const sevenDaysAgo = now() - SEVEN_DAYS_IN_SECONDS;
+            this.subscribe('dms', [{kinds: [ENCRYPTED_DM_KIND], '#p': [identity.pk], since: sevenDaysAgo}]);
+            this.subscribe('profile', [{kinds: [PROFILE_KIND], authors: [identity.pk], limit: 1}]);
             this.resubscribeToGroups();
         }
     }
 
     resubscribeToGroups() {
         const gids = Object.values(this.dataStore.state.thoughts).filter(c => c.type === 'group').map(c => c.id);
-        const currentRelays = this.dataStore.state.relays;
-        if (gids.length > 0 && currentRelays.length > 0) {
-            const sevenDaysAgo = Utils.now() - (7 * 24 * 60 * 60); // Events from the last 7 days for live stream
+        if (gids.length > 0) {
+            const sevenDaysAgo = now() - SEVEN_DAYS_IN_SECONDS;
             this.subscribe('groups', [{
-                kinds: [41],
+                kinds: [GROUP_CHAT_KIND],
                 '#g': gids,
                 since: sevenDaysAgo
             }]);
@@ -160,69 +170,81 @@ export class Nostr extends EventEmitter {
         }
     }
 
-    /**
-     * Fetches historical messages for a specific thought using querySync.
-     * These events will then be processed by AppController.processNostrEvent.
-     */
     async fetchHistoricalMessages(thought) {
         const {identity, relays} = this.dataStore.state;
-        if (relays.length === 0 || !thought || !this.appController) {
-            Logger.warn('Cannot fetch historical messages: Missing relays, thought, or appController reference.');
+        if (relays.length === 0 || !thought) {
+            Logger.warnWithContext('Nostr', 'Cannot fetch historical messages: Missing relays or thought.');
             return;
         }
 
         let filters = [];
-        // Align public feed historical fetch with working feed.html's more conservative query.
-        const publicHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for public feed (was 24 hours)
-        const publicHistoricalLimit = 20; // Limit to 20 events for public feed
-        const dmGroupHistoricalPeriod = Utils.now() - (7 * 24 * 60 * 60); // Last 7 days for DMs/Groups
+        const publicHistoricalPeriod = now() - SEVEN_DAYS_IN_SECONDS;
+        const publicHistoricalLimit = 20;
+        const dmGroupHistoricalPeriod = now() - SEVEN_DAYS_IN_SECONDS;
 
         if (thought.type === 'public') {
-            filters.push({kinds: [1], limit: publicHistoricalLimit, since: publicHistoricalPeriod});
+            filters.push({kinds: [TEXT_NOTE_KIND], limit: publicHistoricalLimit, since: publicHistoricalPeriod});
         } else if (thought.type === 'dm' && identity.pk) {
             filters.push({
-                kinds: [4],
+                kinds: [ENCRYPTED_DM_KIND],
                 '#p': [thought.pubkey],
                 authors: [identity.pk, thought.pubkey],
                 limit: MESSAGE_LIMIT,
                 since: dmGroupHistoricalPeriod
             });
         } else if (thought.type === 'group') {
-            filters.push({kinds: [41], '#g': [thought.id], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod});
+            filters.push({kinds: [GROUP_CHAT_KIND], '#g': [thought.id], limit: MESSAGE_LIMIT, since: dmGroupHistoricalPeriod});
         } else {
-            Logger.log(`Skipping historical fetch for unsupported thought type: ${thought.type}`);
+            Logger.logWithContext('Nostr', `Skipping historical fetch for unsupported or local thought type: ${thought.type}`);
             return;
         }
 
-        //Logger.log(`Attempting to fetch historical messages for thought ${thought.id} (${thought.type}) with filters:`, filters, 'from relays:', relays);
         try {
+            Logger.debug('Nostr', `Fetching historical messages for thought ${thought.id} with filters:`, filters);
             const events = await this.pool.querySync(relays, filters);
-            //Logger.log(`Fetched ${events.length} historical events for ${thought.id}. First event (if any):`, events[0]);
+            Logger.debug('Nostr', `Fetched ${events.length} historical events for thought ${thought.id}.`);
             for (const event of events) {
-                await this.appController.processNostrEvent(event, `historical-${thought.id}`);
+                if (this.seenEventIds.has(event.id)) {
+                    Logger.debug('Nostr', `Historical event ${event.id} already seen, skipping.`);
+                    continue;
+                }
+                this.seenEventIds.add(event.id);
+                await this.eventProcessor.processNostrEvent(event, `historical-${thought.id}`);
             }
-        } catch (e) {
-            Logger.error(`Failed to fetch historical messages for ${thought.id}:`, e);
+        } catch (err) {
+            Logger.errorWithContext('Nostr', `Failed to fetch historical messages for ${thought.id}:`, err);
         }
     }
 
     async fetchProfile(pubkey) {
         const {profiles, fetchingProfiles, relays} = this.dataStore.state;
-        if (!pubkey || profiles[pubkey]?.lastUpdatedAt || fetchingProfiles.has(pubkey) || relays.length === 0) return;
+        if (!pubkey || profiles[pubkey]?.lastUpdatedAt || fetchingProfiles.has(pubkey) || relays.length === 0) {
+            if(relays.length === 0 && pubkey) Logger.warnWithContext('Nostr', `Cannot fetch profile for ${pubkey}: No relays.`);
+            return;
+        }
 
         fetchingProfiles.add(pubkey);
-        this.dataStore.emitStateUpdated(); // Changed to debounced emitter
+        this.dataStore.emitStateUpdated();
+        Logger.debug('Nostr', `Fetching profile for pubkey: ${pubkey}`);
 
         try {
-            const event = await this.pool.get(relays, {kinds: [0], authors: [pubkey]});
+            const event = await this.pool.get(relays, {kinds: [PROFILE_KIND], authors: [pubkey]});
             if (event) {
-                this.emit('event', {event}); // Process the fetched profile event
+                Logger.debug('Nostr', `Fetched profile event for ${pubkey}:`, event);
+                if (!this.seenEventIds.has(event.id)) {
+                    this.seenEventIds.add(event.id);
+                    await this.eventProcessor.processNostrEvent(event, 'profile-fetch');
+                } else {
+                    Logger.debug('Nostr', `Profile event ${event.id} for ${pubkey} already seen, skipping.`);
+                }
+            } else {
+                Logger.debug('Nostr', `No profile event found for ${pubkey}.`);
             }
-        } catch (e) {
-            Logger.warn(`Profile fetch failed for ${pubkey}:`, e);
+        } catch (err) {
+            Logger.warnWithContext('Nostr', `Profile fetch failed for ${pubkey}:`, err);
         } finally {
             fetchingProfiles.delete(pubkey);
-            this.dataStore.emitStateUpdated(); // Changed to debounced emitter
+            this.dataStore.emitStateUpdated();
         }
     }
 }
