@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "clean": "rimraf dist coverage .vite",
     "security:audit": "npm audit --audit-level=high",
+    "deploy": "gh-pages -d dist",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -23,6 +24,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.1",
+    "gh-pages": "^6.1.1",
     "glob": "^11.0.2",
     "husky": "^9.0.11",
     "jsdom": "^26.1.0",

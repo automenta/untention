@@ -43,6 +43,7 @@ Here are the essential scripts for development and building:
 -   `npm run clean`: Removes build artifacts (`dist/`, `.vite/`) and test reports (`coverage/`).
 -   `npm run security:audit`: Runs `npm audit` to check for security vulnerabilities in dependencies.
 -   `npm run build:analyze`: Performs a production build and then generates an interactive bundle size report (`dist/bundle-report.html`), helping identify large dependencies.
+-   `npm run deploy`: Deploys the production build to GitHub Pages.
 -   `npm run prepare`: Sets up Husky Git hooks (automatically run after `npm install`).
 
 ## Basic Usage

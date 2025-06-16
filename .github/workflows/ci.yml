@@ -35,3 +35,11 @@ jobs:
 
       - name: Build project
         run: npm run build
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main' # Only deploy from the main branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist # The directory to publish
+          # cname: example.com # Uncomment and set your custom domain if applicable
