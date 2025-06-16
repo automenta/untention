@@ -13,7 +13,8 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint . --ext js,jsx,cjs --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build:analyze": "vite build --mode production && npx rollup-plugin-visualizer"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
@@ -27,6 +28,7 @@
     "lint-staged": "^15.2.7",
     "localforage": "^1.10.0",
     "prettier": "^3.3.2",
+    "rollup-plugin-visualizer": "^5.12.0",
     "vite": "^6.3.5",
     "vite-plugin-eslint": "^1.8.1",
     "vite-plugin-pwa": "^0.20.0",

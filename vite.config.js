@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import path from 'path'; // Import path module for alias resolution
 import eslintPlugin from 'vite-plugin-eslint'; // Import the ESLint plugin
 import { VitePWA } from 'vite-plugin-pwa'; // Import the PWA plugin
+import { visualizer } from 'rollup-plugin-visualizer'; // Import the visualizer plugin
 
 export default defineConfig({
   // Base public path when served in production.
@@ -98,6 +99,14 @@ export default defineConfig({
       devOptions: {
         enabled: true, // Enable PWA in development for testing
       },
+    }),
+    // Only run visualizer when explicitly requested (e.g., via `npm run build:analyze`)
+    // This prevents it from running on every `npm run build` if not desired.
+    process.env.NODE_ENV === 'production' && visualizer({
+      filename: './dist/bundle-report.html', // Output file for the report
+      open: true, // Automatically open the report in the browser
+      gzipSize: true, // Show gzip sizes
+      brotliSize: true, // Show brotli sizes
     }),
     // - vite-plugin-image for image optimization
   ],
