@@ -27,6 +27,13 @@ export class CreateGroupModal extends BaseModal {
         return this._formComponent;
     }
 
+    onShow() {
+        const nameInput = this._formComponent?.element.querySelector('input[name="name"]');
+        if (nameInput) {
+            nameInput.focus();
+        }
+    }
+
     getFooterButtons() {
         return [
             new Button({

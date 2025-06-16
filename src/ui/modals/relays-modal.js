@@ -102,8 +102,15 @@ export class RelaysModal extends BaseModal {
                 addButtonComponent
             );
             this._contentComponent.add(form);
+            this.urlInputComponent = urlInputComponent;
         }
         return this._contentComponent;
+    }
+
+    onShow() {
+        if (this.urlInputComponent && this.urlInputComponent.element) {
+            this.urlInputComponent.element.focus();
+        }
     }
 
     getFooterButtons() {

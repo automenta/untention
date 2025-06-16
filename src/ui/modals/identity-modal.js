@@ -31,6 +31,13 @@ export class IdentityModal extends BaseModal {
         return this._formComponent;
     }
 
+    onShow() {
+        const privkeyInput = this._formComponent?.element.querySelector('input[name="privkey"]');
+        if (privkeyInput) {
+            privkeyInput.focus();
+        }
+    }
+
     getFooterButtons() {
         return [
             new Button({

@@ -31,6 +31,13 @@ export class JoinGroupModal extends BaseModal {
         return this._formComponent;
     }
 
+    onShow() {
+        const idInput = this._formComponent?.element.querySelector('input[name="id"]');
+        if (idInput) {
+            idInput.focus();
+        }
+    }
+
     getFooterButtons() {
         return [
             new Button({
