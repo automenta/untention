@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import path from 'path'; // Import path module for alias resolution
 import eslintPlugin from 'vite-plugin-eslint'; // Import the ESLint plugin
+import { VitePWA } from 'vite-plugin-pwa'; // Import the PWA plugin
 
 export default defineConfig({
   // Base public path when served in production.
@@ -20,7 +21,7 @@ export default defineConfig({
     outDir: 'dist', // Output directory for production build
     sourcemap: true, // Generate sourcemaps for debugging production builds
     // Minify output. 'esbuild' is faster, 'terser' offers more configuration.
-    // minify: 'esbuild', 
+    minify: 'esbuild', // Activated minification
     // rollupOptions: {
     //   // Custom Rollup options if needed for advanced bundling scenarios
     //   // For example, to externalize certain dependencies or configure output formats
@@ -63,6 +64,40 @@ export default defineConfig({
       cache: false, // Disable cache for simpler setup, enable for larger projects
       failOnWarning: false, // Don't fail build on warnings
       failOnError: true, // Fail build on errors
+    }),
+    VitePWA({ // Configure PWA plugin
+      registerType: 'autoUpdate', // Automatically update service worker
+      injectRegister: 'auto', // Inject service worker registration code
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'], // Files to cache
+      },
+      manifest: {
+        name: 'Untention App',
+        short_name: 'Untention',
+        description: 'A decentralized thought management application',
+        theme_color: '#ffffff',
+        icons: [
+          {
+            src: 'pwa-192x192.png', // You'll need to create these icons
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+      devOptions: {
+        enabled: true, // Enable PWA in development for testing
+      },
     }),
     // - vite-plugin-image for image optimization
   ],
