@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BaseModal } from './modal.js';
-import { Component } from '/ui/ui.js'; // Assuming ui.js is in the parent directory relative to modals
+import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {BaseModal} from './modal.js';
+import {Component} from '/ui/ui.js'; // Assuming ui.js is in the parent directory relative to modals
 
 // Mock App and its properties (ui, dataStore)
 const mockApp = {

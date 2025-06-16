@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RelaysModal } from './relays-modal.js';
-import { Component, Button } from '/ui/ui.js'; // Corrected import path
-import { escapeHtml } from '/utils/ui-utils.js'; // Import escapeHtml directly
+import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {RelaysModal} from './relays-modal.js';
+import {Component} from '/ui/ui.js'; // Corrected import path
+import {escapeHtml} from '/utils/ui-utils.js'; // Import escapeHtml directly
 
 const mockApp = {
     ui: {

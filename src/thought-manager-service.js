@@ -1,4 +1,4 @@
-import { Logger } from '/logger.js';
+import {Logger} from '/logger.js';
 import localforage from 'localforage';
 
 const DEFAULT_THOUGHT_ID = 'public'; // Define locally for now

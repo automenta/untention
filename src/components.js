@@ -1,11 +1,9 @@
 import DOMPurify from 'dompurify';
-import { Component, Button } from '/ui/ui.js';
-import { Logger } from '/logger.js'; // Assuming Logger might be used, good practice to include
+import {Button, Component} from '/ui/ui.js';
 // No direct use of EventEmitter in this file's classes, but keeping for potential (though unlikely) module-level use.
-import { EventEmitter } from '/event-emitter.js';
-import { escapeHtml, createAvatarSvg, getUserColor } from '/utils/ui-utils.js';
-import { formatTime, now } from '/utils/time-utils.js';
-import { shortenPubkey } from '/utils/nostr-utils.js'; // findTag not used here
+import {createAvatarSvg, escapeHtml, getUserColor} from '/utils/ui-utils.js';
+import {formatTime, now} from '/utils/time-utils.js';
+import {shortenPubkey} from '/utils/nostr-utils.js'; // findTag not used here
 
 const { nip19, nip04 } = NostrTools;
 

@@ -1,7 +1,7 @@
-import { Logger } from '/logger.js';
-import { shortenPubkey } from '/utils/nostr-utils.js';
-import { now } from '/utils/time-utils.js';
-import { exportKeyAsBase64 } from '/utils/crypto-utils.js';
+import {Logger} from '/logger.js';
+import {shortenPubkey} from '/utils/nostr-utils.js';
+import {now} from '/utils/time-utils.js';
+import {exportKeyAsBase64} from '/utils/crypto-utils.js';
 // NostrTools is expected to be available globally
 const { nip19 } = NostrTools;
 

@@ -1,5 +1,3 @@
-import { Component, Button } from '/ui/ui.js'; // Assuming Button is also in ui.js
-
 export class BaseModal {
     constructor(title, app) {
         if (!app || !app.ui) {

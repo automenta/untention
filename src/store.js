@@ -1,7 +1,7 @@
-import { Logger } from '/logger.js'; // Corrected path
-import { EventEmitter } from '/event-emitter.js'; // Corrected path
-import { hexToBytes, bytesToHex } from '/utils/crypto-utils.js';
-import { validateRelayUrl } from '/utils/nostr-utils.js';
+import {Logger} from '/logger.js'; // Corrected path
+import {EventEmitter} from '/event-emitter.js'; // Corrected path
+import {bytesToHex, hexToBytes} from '/utils/crypto-utils.js';
+import {validateRelayUrl} from '/utils/nostr-utils.js';
 
 const { getPublicKey } = NostrTools;
 

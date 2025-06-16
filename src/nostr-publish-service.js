@@ -1,6 +1,6 @@
-import { Logger } from '/logger.js';
-import { now } from '/utils/time-utils.js';
-import { aesEncrypt } from '/utils/crypto-utils.js';
+import {Logger} from '/logger.js';
+import {now} from '/utils/time-utils.js';
+import {aesEncrypt} from '/utils/crypto-utils.js';
 // NostrTools is expected to be available globally
 const { nip04 } = NostrTools;
 

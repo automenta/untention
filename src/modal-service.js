@@ -1,12 +1,12 @@
 // Import specific modal classes
-import { IdentityModal } from '/ui/modals/identity-modal.js';
-import { ProfileModal } from '/ui/modals/profile-modal.js';
-import { CreateGroupModal } from '/ui/modals/create-group-modal.js';
-import { JoinGroupModal } from '/ui/modals/join-group-modal.js';
-import { CreateDmModal } from '/ui/modals/create-dm-modal.js';
-import { GroupInfoModal } from '/ui/modals/group-info-modal.js';
-import { RelaysModal } from '/ui/modals/relays-modal.js';
-import { Logger } from '/logger.js'; // Adjusted path
+import {IdentityModal} from '/ui/modals/identity-modal.js';
+import {ProfileModal} from '/ui/modals/profile-modal.js';
+import {CreateGroupModal} from '/ui/modals/create-group-modal.js';
+import {JoinGroupModal} from '/ui/modals/join-group-modal.js';
+import {CreateDmModal} from '/ui/modals/create-dm-modal.js';
+import {GroupInfoModal} from '/ui/modals/group-info-modal.js';
+import {RelaysModal} from '/ui/modals/relays-modal.js';
+import {Logger} from '/logger.js'; // Adjusted path
 
 
 export class ModalService {

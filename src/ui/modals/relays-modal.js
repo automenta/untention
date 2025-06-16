@@ -1,7 +1,7 @@
-import { BaseModal } from './modal.js';
-import { Component, Button } from '/ui/ui.js';
-import { escapeHtml } from '/utils/ui-utils.js'; // Import escapeHtml directly
-import { validateRelayUrl } from '/utils/nostr-utils.js';
+import {BaseModal} from './modal.js';
+import {Button, Component} from '../../ui.js';
+import {escapeHtml} from '/utils/ui-utils.js'; // Import escapeHtml directly
+import {validateRelayUrl} from '/utils/nostr-utils.js';
 
 export class RelaysModal extends BaseModal {
     constructor(app, relaysList) {
