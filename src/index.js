@@ -13,7 +13,7 @@ import { shortenPubkey } from "/utils/nostr-utils.js";
 // Other utils like validateRelayUrl, findTag, ui-utils are not directly used in App class methods here,
 // but might be used in other modules that App interacts with.
 
-import { Button, Component } from "/ui/ui.js";
+import { Button, Component } from "./ui/ui.js"; // Changed from /ui/ui.js
 import { ModalService } from "/modal-service.js"; // Import ModalService
 import {Nostr} from "/nostr.js";
 import { Data } from '/store.js';
