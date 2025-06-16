@@ -2,7 +2,6 @@ import {Logger} from '/logger.js';
 import {shortenPubkey} from '/utils/nostr-utils.js';
 import {now} from '/utils/time-utils.js';
 import {exportKeyAsBase64} from '/utils/crypto-utils.js';
-// NostrTools is expected to be available globally
 const { nip19 } = NostrTools;
 
 export class ThoughtCreationService {
@@ -10,7 +9,7 @@ export class ThoughtCreationService {
         this.dataStore = dataStore;
         this.ui = ui;
         this.nostr = nostr;
-        this.app = app; // To access app.modalService, app.thoughtManagerService
+        this.app = app;
     }
 
     async createDmThought(pubkeyInput) {
@@ -31,7 +30,7 @@ export class ThoughtCreationService {
                     lastEventTimestamp: now()
                 });
                 await this.dataStore.saveThoughts();
-                await this.nostr.fetchProfile(pk); // Fetch profile of the DM partner
+                await this.nostr.fetchProfile(pk);
             }
             this.app.thoughtManagerService.selectThought(pk);
             this.ui.showToast(`DM started.`, 'success');
@@ -65,7 +64,7 @@ export class ThoughtCreationService {
             await this.dataStore.saveThoughts();
             this.app.thoughtManagerService.selectThought(id);
             this.ui.showToast(`Group "${name}" created.`, 'success');
-            this.app.modalService.show('groupInfo'); // Show group info modal
+            this.app.modalService.show('groupInfo');
         } catch (e) {
             Logger.error('Error creating group thought:', e);
             this.ui.showToast(`Failed to create group: ${e.message || 'An unexpected error occurred while creating the group.'}`, 'error');
@@ -82,8 +81,7 @@ export class ThoughtCreationService {
             if (!id || !key || !name) throw new Error('Group ID, key, and name are required.');
 
             this.ui.setLoading(true);
-            // Basic check for Base64 key format
-            atob(key); // This will throw an error if 'key' is not a valid base64 string.
+            atob(key);
 
             this.dataStore.setState(s => s.thoughts[id] = {
                 id,
@@ -125,7 +123,7 @@ export class ThoughtCreationService {
                 id: newId,
                 name: noteName,
                 type: 'note',
-                body: '', // Initialize with empty body
+                body: '',
                 lastEventTimestamp: now(),
                 unread: 0
             };

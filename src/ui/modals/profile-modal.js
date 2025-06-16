@@ -1,5 +1,6 @@
 import {BaseModal} from './modal.js';
 import {Button, Component} from '../../ui.js';
+import {Logger} from '/logger.js';
 
 export class ProfileModal extends BaseModal {
     constructor(app, profileData = {}) {
@@ -16,7 +17,6 @@ export class ProfileModal extends BaseModal {
                     e.preventDefault();
                     const formData = new FormData(e.target);
                     this.app.handleAction('update-profile', formData);
-                    // App.updateProfile is responsible for hiding the modal via app.ui.hideModal()
                 }
             });
 
@@ -49,7 +49,7 @@ export class ProfileModal extends BaseModal {
                     if (this._formComponent && this._formComponent.element) {
                         this._formComponent.element.requestSubmit();
                     } else {
-                        console.error("ProfileModal: Form component not available for submission.");
+                        Logger.error("ProfileModal: Form component not available for submission.");
                     }
                 }
             })

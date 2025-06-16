@@ -1,14 +1,13 @@
 import {Logger} from '/logger.js';
 import {hexToBytes} from '/utils/crypto-utils.js';
 
-// NostrTools is expected to be available globally
 const { nip19, generateSecretKey } = NostrTools;
 
 export class IdentityService {
     constructor(dataStore, ui, app) {
         this.dataStore = dataStore;
         this.ui = ui;
-        this.app = app; // To access things like nostr.connect() or selectThought() if needed
+        this.app = app;
     }
 
     async saveIdentity(skInput) {
@@ -31,15 +30,11 @@ export class IdentityService {
             else if (!skInput) sk = generateSecretKey();
             else throw new Error('Invalid secret key format.');
 
-            await this.dataStore.clearIdentity(); // Clear previous identity
-            await this.dataStore.saveIdentity(sk); // Save the new one
-            // App.init() has a listener for 'state:updated' which calls nostr.connect()
-            // dataStore.saveIdentity and dataStore.load should trigger this.
+            await this.dataStore.clearIdentity();
+            await this.dataStore.saveIdentity(sk);
             await this.dataStore.load();
 
             this.ui.showToast('Identity successfully saved and loaded!', 'success');
-            // Potentially trigger app-level actions if necessary, e.g. app.selectThought(DEFAULT_THOUGHT_ID);
-            // For now, relying on state update events.
         } catch (e) {
             Logger.errorWithContext('IdentityService', 'Save identity error:', e);
             let userMessage = 'An unexpected error occurred while saving your identity.';
@@ -72,9 +67,7 @@ export class IdentityService {
         this.ui.setLoading(true);
         try {
             await this.dataStore.clearIdentity();
-            // App.init() state:updated listener should handle UI changes and nostr disconnect/reconnect.
             this.ui.showToast('Logged out.', 'info');
-            // Potentially: this.app.selectThought(DEFAULT_THOUGHT_ID);
         } catch (e) {
             Logger.errorWithContext('IdentityService', 'Error during logout:', e);
             this.ui.showToast(`Logout failed: ${e.message || 'An unexpected error occurred during logout.'}`, 'error');

@@ -8,7 +8,6 @@ export class RelayManagerService {
     }
 
     async addRelay(url) {
-        // Logic from App._appHandleAddRelay
         this.ui.hideModal();
         try {
             await this.dataStore.addRelay(url);
@@ -21,7 +20,6 @@ export class RelayManagerService {
     }
 
     async removeRelay(url) {
-        // Logic from App._appHandleRemoveRelay
         if (confirm(`Are you sure you want to remove the relay: ${url}?`)) {
             this.ui.hideModal();
             try {
@@ -29,14 +27,13 @@ export class RelayManagerService {
                 this.nostr.connect();
                 this.ui.showToast('Relay removed. Reconnecting...', 'info');
             } catch (e) {
-                Logger.error('Error removing relay:', e);
+                Logger.errorWithContext('RelayManagerService', 'Error removing relay:', e);
                 this.ui.showToast(`Failed to remove relay: ${e.message || 'An unexpected error occurred.'}`, 'error');
             }
         }
     }
 
     async updateRelaysList(newRelays) {
-        // Logic from App.updateRelays
         this.ui.hideModal();
         try {
             await this.dataStore.updateRelaysList(newRelays);

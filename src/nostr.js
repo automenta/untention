@@ -129,9 +129,6 @@ export class Nostr extends EventEmitter {
         try {
             Logger.debug('Nostr', 'Publishing event:', signedEvent);
             const promises = this.pool.publish(currentRelays, signedEvent);
-            if (!Array.isArray(promises) || !promises.every(p => p instanceof Promise)) {
-                 Logger.errorWithContext('Nostr', 'this.pool.publish did not return an array of Promises. Mock issue?', promises);
-            }
             const results = await Promise.any(promises);
             Logger.debug('Nostr', 'Event published successfully to at least one relay:', results);
             return signedEvent;

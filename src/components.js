@@ -125,6 +125,9 @@ class NoteEditorView extends Component {
     }
 }
 
+const MESSAGE_ID_MAX_SIZE = 2000;
+const MESSAGE_ID_TRIM_THRESHOLD = 1500;
+
 class MessageListView extends Component {
     constructor(app, dataStore) {
         super('div', { id: 'message-list' });
@@ -220,6 +223,11 @@ class MessageListView extends Component {
                 this.renderedMessageIds.delete(oldestChild.dataset.id);
             }
             oldestChild.remove();
+        }
+
+        if (this.renderedMessageIds.size > MESSAGE_ID_MAX_SIZE) {
+            const tempArray = Array.from(this.renderedMessageIds);
+            this.renderedMessageIds = new Set(tempArray.slice(tempArray.length - MESSAGE_ID_TRIM_THRESHOLD));
         }
 
         if (msgsToRender.length > 0 && isScrolledToBottom) {
@@ -321,9 +329,6 @@ export class MainView extends Component {
         this.noThoughtSelectedView = noThoughtSelectedView;
         this.noteEditorView = noteEditorView;
         this.messageListView = messageListView;
-
-        this.noteEditorView.show(false);
-        this.messageListView.show(false);
 
         this.inputForm = new Component('form', {id: 'message-input-form', autocomplete: 'off'});
         this.input = new Component('textarea', {id: 'message-input', placeholder: 'Type your message...'});

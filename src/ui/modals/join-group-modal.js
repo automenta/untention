@@ -1,5 +1,6 @@
 import {BaseModal} from './modal.js';
 import {Button, Component} from '../../ui.js';
+import {Logger} from '/logger.js';
 
 export class JoinGroupModal extends BaseModal {
     constructor(app) {
@@ -15,7 +16,6 @@ export class JoinGroupModal extends BaseModal {
                     e.preventDefault();
                     const formData = new FormData(e.target);
                     this.app.handleAction('join-group', formData);
-                    // App.joinGroupThought is responsible for hiding the modal.
                 }
             });
 
@@ -48,7 +48,6 @@ export class JoinGroupModal extends BaseModal {
                     if (this._formComponent && this._formComponent.element) {
                         const idInput = this._formComponent.element.querySelector('input[name="id"]');
                         const keyInput = this._formComponent.element.querySelector('input[name="key"]');
-                        // Basic client-side validation for required fields
                         if (idInput && !idInput.value.trim()) {
                             this.app.ui.showToast('Group ID is required.', 'error');
                             idInput.focus();
@@ -61,7 +60,7 @@ export class JoinGroupModal extends BaseModal {
                         }
                         this._formComponent.element.requestSubmit();
                     } else {
-                        console.error("JoinGroupModal: Form component not available for submission.");
+                        Logger.error("JoinGroupModal: Form component not available for submission.");
                     }
                 }
             })

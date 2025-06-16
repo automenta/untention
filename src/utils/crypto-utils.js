@@ -1,7 +1,5 @@
-// Moved from original Utils.bytesToHex
 export const bytesToHex = bytes => bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '');
 
-// Moved from original Utils.hexToBytes
 export const hexToBytes = hex => {
     if (!hex) return new Uint8Array();
     const matched = hex.match(/.{1,2}/g);
@@ -21,16 +19,13 @@ export const hexToBytes = hex => {
     return new Uint8Array(bytes);
 };
 
-// Moved from original Utils.uint8ArrayToBase64
 export const uint8ArrayToBase64 = arr => btoa(String.fromCharCode(...arr));
 
-// Moved from original Utils.base64ToUint8Array
 export const base64ToUint8Array = s => new Uint8Array(atob(s).split("").map(c => c.charCodeAt(0)));
 
-// Original Utils.crypto methods, now top-level exports
 export const aesEncrypt = async (plainText, keyBase64) => {
     const key = await importKeyFromBase64(keyBase64);
-    const iv = crypto.getRandomValues(new Uint8Array(12)); // AES-GCM standard IV size is 12 bytes (96 bits)
+    const iv = crypto.getRandomValues(new Uint8Array(12));
     const cipherText = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, key, new TextEncoder().encode(plainText));
     return `${uint8ArrayToBase64(iv)}:${uint8ArrayToBase64(new Uint8Array(cipherText))}`;
 };
@@ -46,7 +41,7 @@ export const aesDecrypt = async (encryptedData, keyBase64) => {
         }, key, base64ToUint8Array(cipherTextBase64));
         return new TextDecoder().decode(plainText);
     } catch (err) {
-        throw err; // Rethrow to allow caller to handle UI, logging, etc.
+        throw err;
     }
 };
 

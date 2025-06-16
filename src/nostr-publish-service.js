@@ -1,15 +1,13 @@
 import {Logger} from '/logger.js';
 import {now} from '/utils/time-utils.js';
 import {aesEncrypt} from '/utils/crypto-utils.js';
-// NostrTools is expected to be available globally
 const { nip04 } = NostrTools;
 
-// Define Nostr event kinds as constants locally for now
 const TEXT_NOTE_KIND = 1;
 const ENCRYPTED_DM_KIND = 4;
 const PROFILE_KIND = 0;
-const GROUP_CHAT_KIND = 41; // Custom kind for encrypted group chat
-const DEFAULT_THOUGHT_ID = 'public'; // Used in sendMessage logic
+const GROUP_CHAT_KIND = 41;
+const DEFAULT_THOUGHT_ID = 'public';
 
 export class NostrPublishService {
     constructor(dataStore, nostr, ui) {
@@ -37,14 +35,10 @@ export class NostrPublishService {
                 eventTemplate.tags.push(['g', activeThought.id]);
                 eventTemplate.content = await aesEncrypt(content, activeThought.secretKey);
             } else if (activeThought.type !== DEFAULT_THOUGHT_ID) {
-                // Allow sending to public, but throw error for other non-DM/non-Group types (e.g. 'note')
                 throw new Error("Sending messages in this thought type is not supported.");
             }
-            // If activeThought.type IS DEFAULT_THOUGHT_ID (public), it remains a TEXT_NOTE_KIND
 
             const signedEvent = await this.nostr.publish(eventTemplate);
-            // processMessage might need to be called from App or a different service if it updates broad app state
-            // For now, keeping it here as it was in App.sendMessage
             await this.nostr.eventProcessor.processMessage({...signedEvent, content}, activeThoughtId);
             this.ui.showToast('Message sent!', 'success');
         } catch (e) {
@@ -67,7 +61,7 @@ export class NostrPublishService {
         }
     }
 
-    async updateProfile(formData) { // formData is expected to be a FormData instance
+    async updateProfile(formData) {
         this.ui.hideModal();
         this.ui.setLoading(true);
         try {
@@ -85,12 +79,10 @@ export class NostrPublishService {
                 tags: [],
                 content: JSON.stringify(newContent)
             });
-            // processKind0 might also be a candidate for moving if it broadly affects app state
-            // For now, keeping it here as it was in App.updateProfile
             await this.nostr.eventProcessor.processKind0(event);
             this.ui.showToast('Profile updated!', 'success');
         } catch (e) {
-            Logger.error('Update profile error:', e); // Log full error
+            Logger.error('Update profile error:', e);
             this.ui.showToast(`Profile update failed: ${e.message || 'An unexpected error occurred while updating the profile.'}`, 'error');
         } finally {
             this.ui.setLoading(false);

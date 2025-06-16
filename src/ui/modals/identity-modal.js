@@ -1,5 +1,6 @@
 import {BaseModal} from './modal.js';
 import {Button, Component} from '../../ui.js';
+import {Logger} from '/logger.js';
 
 export class IdentityModal extends BaseModal {
     constructor(app) {
@@ -47,7 +48,7 @@ export class IdentityModal extends BaseModal {
                     if (this._formComponent && this._formComponent.element) {
                         this._formComponent.element.requestSubmit();
                     } else {
-                        console.error("IdentityModal: Form component not available for submission.");
+                        Logger.error("IdentityModal: Form component not available for submission.");
                     }
                 }
             })
