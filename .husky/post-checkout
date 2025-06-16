@@ -1,0 +1,16 @@
+#!/bin/sh
+# This hook runs after a git checkout.
+# It checks if node_modules might be out of sync with package-lock.json
+# and provides a warning to the user.
+
+# Check if package-lock.json exists
+if [ -f "package-lock.json" ]; then
+  # Check if node_modules directory exists
+  if [ ! -d "node_modules" ]; then
+    echo "WARNING: node_modules directory not found. Dependencies might be missing. Please run 'npm install'."
+  elif [ "package-lock.json" -nt "node_modules" ]; then
+    # Check if package-lock.json is newer than node_modules
+    # This is a heuristic. A more robust check would involve comparing hashes or npm ci --dry-run.
+    echo "WARNING: package-lock.json is newer than node_modules. Dependencies might be out of sync. Please run 'npm install'."
+  fi
+fi

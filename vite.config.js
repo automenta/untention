@@ -7,7 +7,7 @@ import { visualizer } from 'rollup-plugin-visualizer'; // Import the visualizer 
 export default defineConfig({
   // Base public path when served in production.
   // Useful if your app is not served from the root of your domain (e.g., '/my-app/').
-  // Defaults to '/'
+  // For GitHub Pages, this often needs to be set to your repository name, e.g., '/your-repo-name/'.
   // base: '/', 
 
   // Configure the development server
@@ -23,10 +23,14 @@ export default defineConfig({
     sourcemap: true, // Generate sourcemaps for debugging production builds
     // Minify output. 'esbuild' is faster, 'terser' offers more configuration.
     minify: 'esbuild', // Activated minification
-    // rollupOptions: {
-    //   // Custom Rollup options if needed for advanced bundling scenarios
-    //   // For example, to externalize certain dependencies or configure output formats
-    // },
+    rollupOptions: {
+      output: {
+        // Control output file names for better caching and organization
+        entryFileNames: 'assets/[name]-[hash].js', // For main entry chunks
+        chunkFileNames: 'assets/chunks/[name]-[hash].js', // For dynamically imported chunks
+        assetFileNames: 'assets/[name]-[hash][extname]', // For assets like CSS, images
+      },
+    },
   },
 
   // Resolve options for module imports

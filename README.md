@@ -21,7 +21,12 @@ notention5 is a Nostr client that allows users to send and receive public and pr
     ```bash
     npm install
     ```
-3.  **Run the development server:**
+    *(Note: This will also automatically set up Git hooks via Husky.)*
+3.  **Environment Variables:**
+    -   If your application requires environment variables (e.g., API keys), create a `.env` file in the project root.
+    -   Refer to `.env.example` for a list of expected variables.
+    -   **Do NOT commit your `.env` file to version control.**
+4.  **Run the development server:**
     ```bash
     npm run dev
     ```
@@ -45,6 +50,7 @@ Here are the essential scripts for development and building:
 -   `npm run build:analyze`: Performs a production build and then generates an interactive bundle size report (`dist/bundle-report.html`), helping identify large dependencies.
 -   `npm run deploy`: Deploys the production build to GitHub Pages.
 -   `npm run prepare`: Sets up Husky Git hooks (automatically run after `npm install`).
+-   `npm run postinstall`: Automatically runs `husky install` after `npm install` to ensure Git hooks are set up.
 
 ## Basic Usage
 
@@ -58,6 +64,14 @@ Here are the essential scripts for development and building:
     -   Explore the "Groups" section to create a new encrypted group or join an existing one using its ID and secret key.
 5.  **Take Notes:**
     -   Use the "Notes" section to create and manage your personal notes, stored locally.
+
+## Deployment to GitHub Pages
+
+This project is configured for automatic deployment to GitHub Pages via GitHub Actions.
+On every push to the `main` branch, the CI workflow will build the project and deploy the `dist` folder to the `gh-pages` branch.
+
+**Important for GitHub Pages:**
+If your GitHub Pages site is hosted at a URL like `https://<username>.github.io/<repository-name>/`, you will need to uncomment and set the `base` option in `vite.config.js` to your repository name (e.g., `base: '/your-repo-name/'`).
 
 ## Contributing
 

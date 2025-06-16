@@ -16,7 +16,8 @@
     "clean": "rimraf dist coverage .vite",
     "security:audit": "npm audit --audit-level=high",
     "deploy": "gh-pages -d dist",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "husky install"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
