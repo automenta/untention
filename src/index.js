@@ -1,19 +1,19 @@
-import {Logger} from "/logger.js";
+import {Logger} from "@/logger.js"; // Updated import
 // Specific crypto utils used in this file:
 // Specific time utils used in this file:
 // Specific nostr utils used in this file:
 // Other utils like validateRelayUrl, findTag, ui-utils are not directly used in App class methods here,
 // but might be used in other modules that App interacts with.
-import {ModalService} from "/modal-service.js"; // Import ModalService
-import {Nostr} from "/nostr.js";
-import {Data} from '/store.js';
-import {UIController} from '/ui-controller.js';
-import {AppUIInitializer} from '/app-ui-initializer.js';
-import {RelayManagerService} from '/relay-manager-service.js';
-import {IdentityService} from '/identity-service.js';
-import {ThoughtManagerService} from '/thought-manager-service.js';
-import {NostrPublishService} from '/nostr-publish-service.js';
-import {ThoughtCreationService} from '/thought-creation-service.js';
+import {ModalService} from "@/modal-service.js"; // Updated import
+import {Nostr} from "@/nostr.js"; // Updated import
+import {Data} from '@/store.js'; // Updated import
+import {UIController} from '@/ui-controller.js'; // Updated import
+import {AppUIInitializer} from '@/app-ui-initializer.js'; // Updated import
+import {RelayManagerService} from '@/relay-manager-service.js'; // Updated import
+import {IdentityService} from '@/identity-service.js'; // Updated import
+import {ThoughtManagerService} from '@/thought-manager-service.js'; // Updated import
+import {NostrPublishService} from '@/nostr-publish-service.js'; // Updated import
+import {ThoughtCreationService} from '@/thought-creation-service.js'; // Updated import
 // Initialize Logger Debug Mode (e.g., based on localStorage or a build flag)
 // To enable debug mode via console: Logger.setDebugMode(true)
 // Or: Logger.setDebugMode(localStorage.getItem('APP_DEBUG_MODE') === 'true');

@@ -6,7 +6,7 @@
 // import {CreateDmModal} from '/ui/modals/create-dm-modal.js';
 // import {GroupInfoModal} from '/ui/modals/group-info-modal.js';
 // import {RelaysModal} from '/ui/modals/relays-modal.js';
-import {Logger} from '/logger.js'; // Adjusted path
+import {Logger} from '@/logger.js'; // Updated import
 
 
 export class ModalService {
@@ -43,25 +43,25 @@ export class ModalService {
         try {
             switch (modalName) {
                 case 'identity':
-                    ModalClass = (await import('/ui/modals/identity-modal.js')).IdentityModal;
+                    ModalClass = (await import('@/ui/modals/identity-modal.js')).IdentityModal;
                     break;
                 case 'profile':
-                    ModalClass = (await import('/ui/modals/profile-modal.js')).ProfileModal;
+                    ModalClass = (await import('@/ui/modals/profile-modal.js')).ProfileModal;
                     break;
                 case 'createGroup':
-                    ModalClass = (await import('/ui/modals/create-group-modal.js')).CreateGroupModal;
+                    ModalClass = (await import('@/ui/modals/create-group-modal.js')).CreateGroupModal;
                     break;
                 case 'joinGroup':
-                    ModalClass = (await import('/ui/modals/join-group-modal.js')).JoinGroupModal;
+                    ModalClass = (await import('@/ui/modals/join-group-modal.js')).JoinGroupModal;
                     break;
                 case 'createDm':
-                    ModalClass = (await import('/ui/modals/create-dm-modal.js')).CreateDmModal;
+                    ModalClass = (await import('@/ui/modals/create-dm-modal.js')).CreateDmModal;
                     break;
                 case 'groupInfo':
-                    ModalClass = (await import('/ui/modals/group-info-modal.js')).GroupInfoModal;
+                    ModalClass = (await import('@/ui/modals/group-info-modal.js')).GroupInfoModal;
                     break;
                 case 'relays':
-                    ModalClass = (await import('/ui/modals/relays-modal.js')).RelaysModal;
+                    ModalClass = (await import('@/ui/modals/relays-modal.js')).RelaysModal;
                     break;
                 default:
                     Logger.warn(`ModalService: Unknown modal type requested: ${modalName}`);

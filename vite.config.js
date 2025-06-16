@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import path from 'path'; // Import path module for alias resolution
+import eslintPlugin from 'vite-plugin-eslint'; // Import the ESLint plugin
 
 export default defineConfig({
   // Base public path when served in production.
@@ -58,7 +59,11 @@ export default defineConfig({
     // Add Vite plugins here. Examples:
     // - @vitejs/plugin-react for React projects
     // - vite-plugin-pwa for Progressive Web App features
-    // - vite-plugin-eslint for ESLint integration during development
+    eslintPlugin({ // Configure ESLint plugin
+      cache: false, // Disable cache for simpler setup, enable for larger projects
+      failOnWarning: false, // Don't fail build on warnings
+      failOnError: true, // Fail build on errors
+    }),
     // - vite-plugin-image for image optimization
   ],
 
