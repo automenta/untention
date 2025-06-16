@@ -1,14 +1,15 @@
 import {Logger} from '/logger.js';
 import localforage from 'localforage';
+import {now} from '/utils/time-utils.js';
 
-const DEFAULT_THOUGHT_ID = 'public'; // Define locally for now
+const DEFAULT_THOUGHT_ID = 'public';
 
 export class ThoughtManagerService {
     constructor(dataStore, ui, nostr, app) {
         this.dataStore = dataStore;
         this.ui = ui;
         this.nostr = nostr;
-        this.app = app; // For potential direct app method calls if needed
+        this.app = app;
     }
 
     async selectThought(id) {
@@ -41,7 +42,6 @@ export class ThoughtManagerService {
 
             if (currentActiveThoughtId !== newActiveThoughtId) {
                 await this.dataStore.loadMessages(newActiveThoughtId);
-                // Ensure nostr service is available and thought exists before fetching
                 if (this.nostr && this.dataStore.state.thoughts[newActiveThoughtId]) {
                     await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[newActiveThoughtId]);
                 }
@@ -71,18 +71,41 @@ export class ThoughtManagerService {
                 this.dataStore.saveThoughts()
             ]);
 
-            await this.selectThought(DEFAULT_THOUGHT_ID); // Call within the service
+            await this.selectThought(DEFAULT_THOUGHT_ID);
             this.ui.showToast('Thought removed.', 'info');
-            // The original App.leaveThought also showed a toast "Switched to public chat"
-            // This is implicitly handled by selectThought if it updates UI or if MainView shows current thought name.
-            // We can add it explicitly if needed, but selectThought should handle the transition.
-            // For consistency, let's add it if the new thought is indeed public.
             if (this.dataStore.state.activeThoughtId === DEFAULT_THOUGHT_ID) {
                  this.ui.showToast(`Switched to ${DEFAULT_THOUGHT_ID} chat.`, 'info');
             }
         } catch (e) {
             Logger.error(`Error leaving thought ${activeThoughtId}:`, e);
             this.ui.showToast(`Failed to remove thought: ${e.message || 'An unexpected error occurred while removing the thought.'}`, 'error');
+        } finally {
+            this.ui.setLoading(false);
+        }
+    }
+
+    async updateNoteContent(id, field, value) {
+        this.ui.setLoading(true);
+        try {
+            const thought = this.dataStore.state.thoughts[id];
+            if (!thought || thought.type !== 'note') {
+                throw new Error('Cannot update a non-note thought or invalid thought ID.');
+            }
+
+            this.dataStore.setState(s => {
+                const targetThought = s.thoughts[id];
+                if (field === 'title') {
+                    targetThought.name = value;
+                } else if (field === 'body') {
+                    targetThought.body = value;
+                }
+                targetThought.lastEventTimestamp = now();
+            });
+            await this.dataStore.saveThoughts();
+            this.ui.showToast('Note updated.', 'success');
+        } catch (e) {
+            Logger.errorWithContext('ThoughtManagerService', 'Error updating note content:', e);
+            this.ui.showToast(`Failed to update note: ${e.message || 'An unexpected error occurred.'}`, 'error');
         } finally {
             this.ui.setLoading(false);
         }

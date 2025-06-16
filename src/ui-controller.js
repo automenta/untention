@@ -1,15 +1,11 @@
 import {Component} from './ui.js';
-// Utils file is no longer directly used here after its disassembly.
-// Specific utilities would be imported if needed. For now, none are.
 
-// Constants for Toast display
 const DEFAULT_TOAST_DURATION = 3000;
 const EMOJI_INFO = 'ℹ️';
 const EMOJI_SUCCESS = '✅';
 const EMOJI_WARN = '⚠️';
 const EMOJI_ERROR = '❌';
 
-// Constant for Loading Indicator
 const LOADING_EMOJI = '⏳';
 
 export class UIController {
@@ -27,7 +23,7 @@ export class UIController {
         return modal;
     }
 
-    showModal({title, body, buttons}) {
+    showModal({title, body, buttons, onMounted}) {
         const modalContent = this.modal.element.querySelector('.modal-content');
         modalContent.innerHTML = '';
 
@@ -38,6 +34,10 @@ export class UIController {
 
         modalContent.append(titleElement, bodyElement, buttonsContainer.element);
         this.modal.element.classList.add('visible');
+
+        if (onMounted && typeof onMounted === 'function') {
+            requestAnimationFrame(() => onMounted());
+        }
     }
 
     hideModal() {
@@ -51,7 +51,7 @@ export class UIController {
             warn: EMOJI_WARN,
             error: EMOJI_ERROR,
         };
-        const selectedEmoji = emojiMap[type] || EMOJI_INFO; // Default to info emoji
+        const selectedEmoji = emojiMap[type] || EMOJI_INFO;
         const fullMessage = `${selectedEmoji} ${message}`;
 
         const toast = new Component('div', {className: 'toast', textContent: fullMessage});
