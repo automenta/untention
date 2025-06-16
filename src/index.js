@@ -17,7 +17,7 @@ import {ThoughtCreationService} from '/thought-creation-service.js';
 // Initialize Logger Debug Mode (e.g., based on localStorage or a build flag)
 // To enable debug mode via console: Logger.setDebugMode(true)
 // Or: Logger.setDebugMode(localStorage.getItem('APP_DEBUG_MODE') === 'true');
-Logger.setDebugMode(false);
+Logger.setDebugMode(import.meta.env.DEV);
 
 // NostrTools is loaded globally via script tag in index.html, so no destructuring needed here.
 // const {generateSecretKey, nip19, nip04 } = NostrTools; // Removed redundant destructuring
