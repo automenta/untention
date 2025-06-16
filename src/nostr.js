@@ -4,16 +4,16 @@ import {EventEmitter} from '@/event-emitter.js';
 import {Logger} from '@/logger.js';
 import {now} from '@/utils/time-utils.js';
 import {NostrEventProcessor} from '@/nostr-event-processor.js';
-
-const PROFILE_KIND = 0;
-const TEXT_NOTE_KIND = 1;
-const ENCRYPTED_DM_KIND = 4;
-const GROUP_CHAT_KIND = 41;
-
-const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
-const SEEN_EVENT_IDS_MAX_SIZE = 2000;
-const SEEN_EVENT_IDS_TRIM_THRESHOLD = 1500;
-const MESSAGE_LIMIT = 100;
+import {
+    ENCRYPTED_DM_KIND,
+    GROUP_CHAT_KIND,
+    MESSAGE_LIMIT,
+    PROFILE_KIND,
+    SEEN_EVENT_IDS_MAX_SIZE,
+    SEEN_EVENT_IDS_TRIM_THRESHOLD,
+    SEVEN_DAYS_IN_SECONDS,
+    TEXT_NOTE_KIND
+} from '@/constants.js';
 
 
 export class Nostr extends EventEmitter {
@@ -97,8 +97,7 @@ export class Nostr extends EventEmitter {
                 }
                 this.seenEventIds.add(event.id);
                 if (this.seenEventIds.size > SEEN_EVENT_IDS_MAX_SIZE) {
-                    const tempArray = Array.from(this.seenEventIds);
-                    this.seenEventIds = new Set(tempArray.slice(tempArray.length - SEEN_EVENT_IDS_TRIM_THRESHOLD));
+                    this.seenEventIds = new Set(Array.from(this.seenEventIds).slice(-SEEN_EVENT_IDS_TRIM_THRESHOLD));
                     Logger.debug('Nostr', 'Pruned seenEventIds set.');
                 }
                 this.eventProcessor.processNostrEvent(event, id);

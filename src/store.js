@@ -2,6 +2,7 @@ import {Logger} from '@/logger.js';
 import {EventEmitter} from '@/event-emitter.js';
 import {bytesToHex, hexToBytes} from '@/utils/crypto-utils.js';
 import {validateRelayUrl} from '@/utils/nostr-utils.js';
+import {DEFAULT_THOUGHT_ID, MESSAGE_DISPLAY_LIMIT} from '@/constants.js';
 
 const { getPublicKey } = NostrTools;
 
@@ -11,8 +12,6 @@ const PROFILES_KEY = 'profiles_v2';
 const ACTIVE_THOUGHT_ID_KEY = 'activeThoughtId_v3';
 const RELAYS_KEY = 'relays_v2';
 const MESSAGES_KEY_PREFIX = 'messages_';
-
-const MESSAGE_DISPLAY_LIMIT = 50;
 
 export class Data extends EventEmitter {
     constructor() {
@@ -31,11 +30,11 @@ export class Data extends EventEmitter {
                 'wss://atlas.nostr.land', 'wss://relay.nostr.band'
             ],
             thoughts: {
-                public: { id: 'public', name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0 }
+                public: { id: DEFAULT_THOUGHT_ID, name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0 }
             },
             messages: {},
             profiles: {},
-            activeThoughtId: 'public',
+            activeThoughtId: DEFAULT_THOUGHT_ID,
             fetchingProfiles: new Set(),
         };
     }
@@ -131,8 +130,8 @@ export class Data extends EventEmitter {
                 : this._getDefaultState().activeThoughtId;
             if (activeThoughtIdResult.status === 'rejected') Logger.warnWithContext('DataStore', 'Failed to load activeThoughtId_v3:', activeThoughtIdResult.reason);
 
-            if (!this.state.thoughts.public) {
-                this.state.thoughts.public = { id: 'public', name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0 };
+            if (!this.state.thoughts[DEFAULT_THOUGHT_ID]) {
+                this.state.thoughts[DEFAULT_THOUGHT_ID] = { id: DEFAULT_THOUGHT_ID, name: 'Public Feed', type: 'public', unread: 0, lastEventTimestamp: 0 };
             }
             if (this.state.identity.pk && this.state.profiles[this.state.identity.pk]) {
                 this.state.identity.profile = this.state.profiles[this.state.identity.pk];

@@ -2,12 +2,14 @@ import {Logger} from '@/logger.js';
 import {aesDecrypt} from '/utils/crypto-utils.js';
 import {findTag, shortenPubkey} from '/utils/nostr-utils.js';
 import {now} from '/utils/time-utils.js';
+import {
+    DEFAULT_THOUGHT_ID,
+    ENCRYPTED_DM_KIND,
+    GROUP_CHAT_KIND,
+    PROFILE_KIND,
+    TEXT_NOTE_KIND
+} from '@/constants.js';
 const { nip04, verifyEvent } = NostrTools;
-
-const PROFILE_KIND = 0;
-const TEXT_NOTE_KIND = 1;
-const ENCRYPTED_DM_KIND = 4;
-const GROUP_CHAT_KIND = 41;
 
 export class NostrEventProcessor {
     constructor(dataStore, nostrInstance, ui) {
@@ -39,8 +41,8 @@ export class NostrEventProcessor {
                     return;
 
                 case TEXT_NOTE_KIND:
-                    if (subId === 'public' || (subId && subId.startsWith('historical-public'))) {
-                        thoughtId = 'public';
+                    if (subId === DEFAULT_THOUGHT_ID || (subId && subId.startsWith('historical-public'))) {
+                        thoughtId = DEFAULT_THOUGHT_ID;
                     } else if (subId && subId.startsWith('thought-')) {
                         thoughtId = subId.split('-')[1];
                     } else {
@@ -143,10 +145,10 @@ export class NostrEventProcessor {
             thought.lastEventTimestamp = Math.max(thought.lastEventTimestamp || 0, originalEvent.created_at);
         }
 
-        if (thoughtId !== 'public') {
+        if (thoughtId !== DEFAULT_THOUGHT_ID) {
              await this.dataStore.saveMessages(thoughtId);
         }
-        await this.dataStore.saveThoughts();
+        this.dataStore.saveThoughts();
 
         this.dataStore.emitStateUpdated();
 

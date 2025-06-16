@@ -1,13 +1,14 @@
 import {Logger} from '@/logger.js';
 import {now} from '/utils/time-utils.js';
 import {aesEncrypt} from '/utils/crypto-utils.js';
+import {
+    DEFAULT_THOUGHT_ID,
+    ENCRYPTED_DM_KIND,
+    GROUP_CHAT_KIND,
+    PROFILE_KIND,
+    TEXT_NOTE_KIND
+} from '@/constants.js';
 const { nip04 } = NostrTools;
-
-const TEXT_NOTE_KIND = 1;
-const ENCRYPTED_DM_KIND = 4;
-const PROFILE_KIND = 0;
-const GROUP_CHAT_KIND = 41;
-const DEFAULT_THOUGHT_ID = 'public';
 
 export class NostrPublishService {
     constructor(dataStore, nostr, ui) {

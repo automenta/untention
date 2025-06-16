@@ -3,6 +3,12 @@ import {Button, Component} from '/ui/ui.js';
 import {createAvatarSvg, escapeHtml, getUserColor} from '/utils/ui-utils.js';
 import {formatTime, now} from '/utils/time-utils.js';
 import {shortenPubkey} from '/utils/nostr-utils.js';
+import {
+    DEFAULT_THOUGHT_ID,
+    MESSAGE_DISPLAY_LIMIT,
+    MESSAGE_ID_MAX_SIZE,
+    MESSAGE_ID_TRIM_THRESHOLD
+} from '@/constants.js';
 
 const { nip19, nip04 } = NostrTools;
 
@@ -122,9 +128,6 @@ class NoteEditorView extends Component {
     }
 }
 
-const MESSAGE_ID_MAX_SIZE = 2000;
-const MESSAGE_ID_TRIM_THRESHOLD = 1500;
-
 class MessageListView extends Component {
     constructor(app, dataStore) {
         super('div', { id: 'message-list' });
@@ -136,7 +139,6 @@ class MessageListView extends Component {
         this.messageRenderQueue = [];
         this.renderScheduled = false;
         this.renderedMessageIds = new Set();
-        this.DISPLAY_MESSAGE_LIMIT = 50;
         this.currentThoughtId = null;
 
         this._handleMessagesUpdated = this._queueMessagesForRender.bind(this);
@@ -178,7 +180,7 @@ class MessageListView extends Component {
             this.messagesContainer.setContent('');
             this.messagesContainer.add(new Component('div', {
                 className: 'message system',
-                innerHTML: `<div class="message-content">${activeThoughtId === 'public' ? "Listening to Nostr's global feed..." : 'No messages yet.'}</div>`
+                innerHTML: `<div class="message-content">${activeThoughtId === DEFAULT_THOUGHT_ID ? "Listening to Nostr's global feed..." : 'No messages yet.'}</div>`
             }));
             return;
         }
@@ -204,17 +206,37 @@ class MessageListView extends Component {
             const senderName = isSelf ? 'You' : p.name;
             const avatarSrc = p.picture ?? createAvatarSvg(senderName, msg.pubkey);
 
+            const messageAvatar = new Component('div', { className: 'message-avatar' }).add(
+                new Component('img', {
+                    className: 'avatar',
+                    src: avatarSrc,
+                    onerror: `this.src='${createAvatarSvg(senderName, msg.pubkey)}'`
+                })
+            );
+
+            const messageHeader = new Component('div', { className: 'message-header' }).add(
+                new Component('div', { className: 'message-sender', style: { color: getUserColor(msg.pubkey) }, textContent: escapeHtml(senderName) }),
+                new Component('div', { className: 'message-time', textContent: formatTime(msg.created_at) })
+            );
+
+            const messageText = new Component('div', { className: 'message-text', innerHTML: DOMPurify.sanitize(msg.content || '') });
+
+            const messageContent = new Component('div', { className: 'message-content' }).add(
+                messageHeader,
+                messageText
+            );
+
             const msgEl = new Component('div', {
-                className: `message ${isSelf ? 'self' : ''}`,
-                innerHTML: `<div class="message-avatar"><img class="avatar" src="${avatarSrc}" onerror="this.src='${createAvatarSvg(senderName, msg.pubkey)}'"></div><div class="message-content"><div class="message-header"><div class="message-sender" style="color: ${getUserColor(msg.pubkey)}">${escapeHtml(senderName)}</div><div class="message-time">${formatTime(msg.created_at)}</div></div><div class="message-text">${DOMPurify.sanitize(msg.content || '')}</div></div>`
-            });
+                className: `message ${isSelf ? 'self' : ''}`
+            }).add(messageAvatar, messageContent);
+
             msgEl.element.dataset.id = msg.id;
             fragment.appendChild(msgEl.element);
         });
 
         this.messagesContainer.element.appendChild(fragment);
 
-        while (this.messagesContainer.element.children.length > this.DISPLAY_MESSAGE_LIMIT) {
+        while (this.messagesContainer.element.children.length > MESSAGE_DISPLAY_LIMIT) {
             const oldestChild = this.messagesContainer.element.firstElementChild;
             if (oldestChild && oldestChild.dataset.id) {
                 this.renderedMessageIds.delete(oldestChild.dataset.id);
@@ -223,8 +245,7 @@ class MessageListView extends Component {
         }
 
         if (this.renderedMessageIds.size > MESSAGE_ID_MAX_SIZE) {
-            const tempArray = Array.from(this.renderedMessageIds);
-            this.renderedMessageIds = new Set(tempArray.slice(tempArray.length - MESSAGE_ID_TRIM_THRESHOLD));
+            this.renderedMessageIds = new Set(Array.from(this.renderedMessageIds).slice(-MESSAGE_ID_TRIM_THRESHOLD));
         }
 
         if (msgsToRender.length > 0 && isScrolledToBottom) {
@@ -245,7 +266,7 @@ class MessageListView extends Component {
             this.renderedMessageIds.clear();
 
             const currentMessages = this.dataStore.state.messages[activeThoughtId] || [];
-            const initialMessagesToRender = currentMessages.slice(-this.DISPLAY_MESSAGE_LIMIT);
+            const initialMessagesToRender = currentMessages.slice(-MESSAGE_DISPLAY_LIMIT);
             this.messageRenderQueue.push(...initialMessagesToRender);
             initialMessagesToRender.forEach(msg => this.renderedMessageIds.add(msg.id));
 
@@ -430,10 +451,8 @@ export class MainView extends Component {
         if (!content) return;
         this.app.handleAction('send-message', content);
         this.input.element.value = '';
-        this.input.element.style.height = 'auto';
-        this.input.element.style.height = `${this.input.element.scrollHeight}px`;
-        if (this.input.element.scrollHeight < 44) this.input.element.style.height = '44px';
-
+        this.input.element.style.height = 'auto'; // Reset height to calculate new scrollHeight
+        this.input.element.style.height = `${Math.max(44, this.input.element.scrollHeight)}px`; // Set to scrollHeight or min 44px
     }
 }
 

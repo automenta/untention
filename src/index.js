@@ -9,14 +9,9 @@ import {IdentityService} from '@/identity-service.js';
 import {ThoughtManagerService} from '@/thought-manager-service.js';
 import {NostrPublishService} from '@/nostr-publish-service.js';
 import {ThoughtCreationService} from '@/thought-creation-service.js';
+import {DEFAULT_THOUGHT_ID} from '@/constants.js';
+
 Logger.setDebugMode(import.meta.env.DEV);
-
-const TEXT_NOTE_KIND = 1;
-const ENCRYPTED_DM_KIND = 4;
-const PROFILE_KIND = 0;
-const GROUP_CHAT_KIND = 41;
-
-const DEFAULT_THOUGHT_ID = 'public';
 
 export class App {
     constructor() {
