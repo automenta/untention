@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RelaysModal } from './relays-modal.js';
 import { Component, Button } from '../ui.js';
-import { Utils } from '../../utils.js'; // Utils is used for escapeHtml
+import { escapeHtml } from '../../utils/ui-utils.js'; // Import escapeHtml directly
 
 const mockApp = {
     ui: {
@@ -48,7 +48,7 @@ describe('RelaysModal', () => {
             const listItems = content.element.querySelectorAll('.relays-list li');
             expect(listItems.length).toBe(initialRelays.length);
             listItems.forEach((li, index) => {
-                expect(li.querySelector('span').textContent).toBe(Utils.escapeHtml(initialRelays[index]));
+                expect(li.querySelector('span').textContent).toBe(escapeHtml(initialRelays[index]));
             });
         });
 
