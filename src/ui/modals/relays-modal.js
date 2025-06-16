@@ -1,6 +1,6 @@
 import { BaseModal } from './modal.js';
 import { Component, Button } from '../ui.js';
-import { Utils } from '../../utils.js'; // Keep for Utils.escapeHtml if used
+import { escapeHtml } from '../../utils/ui-utils.js'; // Import escapeHtml directly
 import { validateRelayUrl } from '../../utils/nostr-utils.js';
 
 export class RelaysModal extends BaseModal {
@@ -40,7 +40,7 @@ export class RelaysModal extends BaseModal {
                     }
                 });
                 listItem.add(new Component('span', {
-                    textContent: Utils.escapeHtml(url), // Use Utils.escapeHtml
+                    textContent: escapeHtml(url), // Use escapeHtml directly
                     style: {
                         flex: 1,
                         marginLeft: '8px',
@@ -60,10 +60,6 @@ export class RelaysModal extends BaseModal {
                         // A more direct refresh would be:
                         // this.relaysList = this.app.dataStore.state.relays; this._contentComponent = null; this.show();
                         // However, the App's state management should ideally drive this.
-                        // The current App.updateRelays calls nostr.connect() and shows a toast.
-                        // ModalService.show() will be called again by App if needed.
-                        // For simplicity here, removing a relay will require the modal to be re-opened to see the change,
-                        // or rely on the main app to re-render UI that includes re-calling modalService.show('relays').
                         // The original _showRelaysModal in ModalService rebuilt itself each time.
                         // This is what will happen if ModalService.show('relays', newRelaysList) is called.
                     }

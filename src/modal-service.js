@@ -6,7 +6,7 @@ import { JoinGroupModal } from './ui/modals/join-group-modal.js';
 import { CreateDmModal } from './ui/modals/create-dm-modal.js';
 import { GroupInfoModal } from './ui/modals/group-info-modal.js';
 import { RelaysModal } from './ui/modals/relays-modal.js';
-import { Logger } from '../logger.js'; // Adjusted path
+import { Logger } from './logger.js'; // Adjusted path
 
 
 export class ModalService {
