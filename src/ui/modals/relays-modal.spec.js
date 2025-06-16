@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RelaysModal } from './relays-modal.js';
-import { Component, Button } from '../ui.js';
+import { Component, Button } from '../../ui.js';
 import { escapeHtml } from '../../utils/ui-utils.js'; // Import escapeHtml directly
 
 const mockApp = {
