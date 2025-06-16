@@ -5,28 +5,23 @@ import {validateRelayUrl} from '@/utils/nostr-utils.js';
 
 const { getPublicKey } = NostrTools;
 
-// Storage keys
 const IDENTITY_KEY = 'identity_v2';
 const THOUGHTS_KEY = 'thoughts_v3';
 const PROFILES_KEY = 'profiles_v2';
 const ACTIVE_THOUGHT_ID_KEY = 'activeThoughtId_v3';
 const RELAYS_KEY = 'relays_v2';
-const MESSAGES_KEY_PREFIX = 'messages_'; // For individual thought messages
+const MESSAGES_KEY_PREFIX = 'messages_';
 
-// Message display limit, also used for in-memory message caching in the store
-const MESSAGE_DISPLAY_LIMIT = 50; // Matches MessageListView's DISPLAY_MESSAGE_LIMIT
+const MESSAGE_DISPLAY_LIMIT = 50;
 
 export class Data extends EventEmitter {
     constructor() {
         super();
-        // Initialize state with defaults. These will be overwritten by loaded data if available.
-        // Assuming _getDefaultState was part of the previous changes that I now see are applied.
         this.state = this._getDefaultState();
         this.debounceTimer = null;
         this.DEBOUNCE_DELAY = 100;
     }
 
-    // Assuming _getDefaultState() is present from previous successful diff.
     _getDefaultState() {
         return {
             identity: {sk: null, pk: null, profile: null},
@@ -92,15 +87,9 @@ export class Data extends EventEmitter {
                 Logger.errorWithContext('DataStore', `Failed to load ${RELAYS_KEY} from localforage:`, relaysResult.reason);
             }
 
-            // This section of DataStore#load was significantly refactored in the previous subtask.
-            // I will ensure the Utils.* calls are updated within that newer structure.
-            // For brevity, I am trusting the previous diff for DataStore#load's logic was mostly okay,
-            // and will just focus on replacing Utils.* calls within its existing structure.
-
-            // Example change within the load method structure (assuming it's similar to my last attempt for store.js)
             if (identityResult.status === 'fulfilled' && identityResult.value?.skHex) {
                 try {
-                    const skBytes = hexToBytes(identityResult.value.skHex); // Changed
+                    const skBytes = hexToBytes(identityResult.value.skHex);
                     this.state.identity.sk = skBytes;
                     this.state.identity.pk = getPublicKey(skBytes);
                     Logger.infoWithContext('DataStore', 'Identity loaded and processed successfully.');
@@ -109,13 +98,12 @@ export class Data extends EventEmitter {
                     this.state.identity = {sk: null, pk: null, profile: null};
                 }
             } else {
-                // ... error logging for identity load failure
                 this.state.identity = {sk: null, pk: null, profile: null};
             }
 
             const defaultRelays = this._getDefaultState().relays;
             if (relaysResult.status === 'fulfilled' && Array.isArray(relaysResult.value)) {
-                const loadedRelays = relaysResult.value.filter(validateRelayUrl); // Changed
+                const loadedRelays = relaysResult.value.filter(validateRelayUrl);
                 if (loadedRelays.length > 0) {
                     this.state.relays = loadedRelays;
                 } else if (relaysResult.value.length > 0) {
@@ -125,7 +113,6 @@ export class Data extends EventEmitter {
                     this.state.relays = [];
                 }
             } else {
-                // ... error logging for relay load failure
                 this.state.relays = defaultRelays;
             }
 
@@ -237,18 +224,11 @@ export class Data extends EventEmitter {
         }
     }
 
-    /**
-     * Adds a message to the in-memory state for a specific thought,
-     * maintains a message limit, and emits updates.
-     * @param {string} thoughtId - The ID of the thought the message belongs to.
-     * @param {object} messageData - The message object to add.
-     */
     addMessage(thoughtId, messageData) {
         if (!this.state.messages[thoughtId]) {
             this.state.messages[thoughtId] = [];
         }
 
-        // Check for duplicates by ID to prevent processing the same event multiple times
         if (this.state.messages[thoughtId].some(msg => msg.id === messageData.id)) {
             Logger.debugWithContext('DataStore', `Message ${messageData.id} for thought ${thoughtId} already exists, skipping.`);
             return;
@@ -256,36 +236,27 @@ export class Data extends EventEmitter {
 
         this.state.messages[thoughtId].push(messageData);
 
-        // Sort messages by created_at timestamp
         this.state.messages[thoughtId].sort((a, b) => a.created_at - b.created_at);
 
-        // Maintain message limit
         if (this.state.messages[thoughtId].length > MESSAGE_DISPLAY_LIMIT) {
             this.state.messages[thoughtId] = this.state.messages[thoughtId].slice(-MESSAGE_DISPLAY_LIMIT);
         }
 
-        // Emit specific event for message list updates
         this.emit(`messages:${thoughtId}:updated`, this.state.messages[thoughtId]);
 
-        // Emit general state update (debounced) for other components like ThoughtList
         this.emitStateUpdated();
     }
 
     async addRelay(url) {
-        if (!validateRelayUrl(url)) { // Changed
+        if (!validateRelayUrl(url)) {
             throw new Error('Invalid relay URL format.');
         }
         const currentRelays = this.state.relays || [];
         if (currentRelays.includes(url)) {
-            // Consider if this should be an error or a silent success.
-            // For now, let's treat it as a success, no change needed.
             Logger.infoWithContext('DataStore', `Relay ${url} already exists.`);
             return;
         }
         const newRelays = [...currentRelays, url];
-        // The overall validation of the list (e.g. not empty) might be handled by a more general update method
-        // or checked by the caller if specific list-wide rules apply after adding.
-        // For this method, we focus on adding one valid relay.
         this.setState(s => s.relays = newRelays);
         await this.saveRelays();
     }
@@ -294,26 +265,19 @@ export class Data extends EventEmitter {
         const currentRelays = this.state.relays || [];
         if (!currentRelays.includes(url)) {
             Logger.warnWithContext('DataStore', `Attempted to remove non-existent relay: ${url}`);
-            return; // Or throw an error, depending on desired strictness
+            return;
         }
         const newRelays = currentRelays.filter(r => r !== url);
-        // Similar to addRelay, list-wide validation (e.g., not empty) is a broader concern.
-        // If removing the last relay has specific implications, the calling context or a general update method handles it.
         this.setState(s => s.relays = newRelays);
         await this.saveRelays();
     }
 
     async updateRelaysList(newRelays) {
-        // This method replaces the logic previously in App.updateRelays
-        const validRelays = [...new Set(newRelays)].filter(validateRelayUrl); // Changed
+        const validRelays = [...new Set(newRelays)].filter(validateRelayUrl);
 
-        // Decision: What if validRelays is empty?
-        // Original App.updateRelays showed a toast: 'No valid relays provided. At least one wss:// relay is required.' and returned.
-        // Throwing an error here allows the App layer to catch it and show the toast.
         if (newRelays.length > 0 && validRelays.length === 0) {
             throw new Error('No valid relays provided. List contains only invalid URLs.');
         }
-        // If newRelays itself is empty, it means the user intends to clear all relays. This is permissible.
 
         this.setState(s => s.relays = validRelays);
         await this.saveRelays();
@@ -335,18 +299,16 @@ export class Data extends EventEmitter {
                 .map(key =>
                     localforage.removeItem(key).catch(err => {
                         Logger.errorWithContext('DataStore', `Failed to remove item ${key} during reset:`, err);
-                        resetCompletelySuccessful = false; // Mark that at least one item failed
+                        resetCompletelySuccessful = false;
                     })
                 );
             await Promise.all(removalPromises);
         } catch (err) {
             Logger.errorWithContext('DataStore', 'Critical error during resetApplicationData (e.g., accessing localforage.keys):', err);
             resetCompletelySuccessful = false;
-            // This kind of error is severe, preventing even the attempt to remove items.
             throw new Error(`Critical failure during application data reset setup: ${err.message}`);
         }
 
-        // Always reset the in-memory state to defaults regardless of storage cleaning outcome.
         this.setState(state => {
             state.identity = {sk: null, pk: null, profile: null};
             state.thoughts = {
@@ -361,10 +323,9 @@ export class Data extends EventEmitter {
             state.messages = {};
             state.profiles = {};
             state.activeThoughtId = 'public';
-            // Also reset fetchingProfiles, just in case
             state.fetchingProfiles = new Set();
         });
-        this.emitStateUpdated(); // Ensure UI reflects the reset in-memory state immediately
+        this.emitStateUpdated();
 
         if (!resetCompletelySuccessful) {
             throw new Error('Failed to completely reset all application data from storage. Some old data might remain.');
@@ -375,16 +336,16 @@ export class Data extends EventEmitter {
     async loadMessages(thoughtId) {
         if (!thoughtId) {
             Logger.warnWithContext('DataStore', 'loadMessages called with no thoughtId');
-            return; // Or throw an error if this case is unexpected
+            return;
         }
         try {
             const messages = await localforage.getItem(`${MESSAGES_KEY_PREFIX}${thoughtId}`);
             this.state.messages[thoughtId] = Array.isArray(messages) ? messages : [];
         } catch (err) {
             Logger.errorWithContext('DataStore', `Failed to load messages for thought ${thoughtId}:`, err);
-            this.state.messages[thoughtId] = []; // Ensure it's an empty array on error
-            this.emit(`messages:${thoughtId}:updated`, this.state.messages[thoughtId]); // Update UI with empty
-            throw err; // Re-throw so the caller (App.js) can show a toast
+            this.state.messages[thoughtId] = [];
+            this.emit(`messages:${thoughtId}:updated`, this.state.messages[thoughtId]);
+            throw err;
         }
         this.emit(`messages:${thoughtId}:updated`, this.state.messages[thoughtId]);
     }

@@ -1,6 +1,7 @@
 import Quill from 'quill';
 import {BaseModal} from './modal.js';
 import {Button, Component} from '/ui/ui.js';
+import {Logger} from '/logger.js';
 
 export class CreateDmModal extends BaseModal {
     constructor(app) {
@@ -54,7 +55,7 @@ export class CreateDmModal extends BaseModal {
                     }
                 });
             } else {
-                console.error("CreateDmModal: Could not find #message-editor element to initialize Quill.");
+                Logger.error("CreateDmModal: Could not find #message-editor element to initialize Quill.");
             }
         }
         if (this.pubkeyInputComponent && this.pubkeyInputComponent.element) {
@@ -84,9 +85,10 @@ export class CreateDmModal extends BaseModal {
                         if (this._formComponent && this._formComponent.element) {
                             this._formComponent.element.requestSubmit();
                         } else {
-                            console.error("CreateDmModal: Form component not available for submission.");
+                            Logger.error("CreateDmModal: Form component not available for submission.");
                         }
                     } else {
+                        this.app.ui.showToast("Recipient's Public Key is required.", 'error');
                         if (this.pubkeyInputComponent && this.pubkeyInputComponent.element) {
                             this.pubkeyInputComponent.element.focus();
                         }
@@ -120,6 +122,7 @@ export class CreateDmModal extends BaseModal {
                     isValid = true;
                 }
             } catch (e) {
+                Logger.debug('CreateDmModal', 'Npub decoding failed:', e);
             }
         }
 

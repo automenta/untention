@@ -1,6 +1,5 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {ModalService} from '/modal-service.js';
-// Import after mocks
 import {IdentityModal} from '/ui/modals/identity-modal.js';
 import {ProfileModal} from '/ui/modals/profile-modal.js';
 import {CreateGroupModal} from '/ui/modals/create-group-modal.js';
@@ -9,8 +8,6 @@ import {CreateDmModal} from '/ui/modals/create-dm-modal.js';
 import {GroupInfoModal} from '/ui/modals/group-info-modal.js';
 import {RelaysModal} from '/ui/modals/relays-modal.js';
 
-// Mock individual modal classes
-// We need to get the path correct relative to modal-service.js
 vi.mock('/ui/modals/identity-modal.js', () => ({ IdentityModal: vi.fn() }));
 vi.mock('/ui/modals/profile-modal.js', () => ({ ProfileModal: vi.fn() }));
 vi.mock('/ui/modals/create-group-modal.js', () => ({ CreateGroupModal: vi.fn() }));
@@ -22,8 +19,8 @@ vi.mock('/ui/modals/relays-modal.js', () => ({ RelaysModal: vi.fn() }));
 
 const mockApp = {
     ui: {
-        showModal: vi.fn(), // Though BaseModal calls this, ModalService itself doesn't directly.
-        hideModal: vi.fn(), // BaseModal calls this.
+        showModal: vi.fn(),
+        hideModal: vi.fn(),
         showToast: vi.fn(),
     },
     dataStore: {
@@ -34,12 +31,10 @@ const mockApp = {
             relays: ['wss://default.relay'],
         }
     }
-    // other app methods might be needed if constructors of modals directly call them, but they shouldn't.
 };
 
 describe('ModalService', () => {
     let modalService;
-    // Generic mock modal instance that all mocked Modal classes will produce
     let mockModalInstanceShowSpy;
     let mockModalInstanceHideSpy;
 
@@ -54,7 +49,6 @@ describe('ModalService', () => {
             hide: mockModalInstanceHideSpy,
         };
 
-        // Configure all mocked modal classes to return this generic instance
         IdentityModal.mockImplementation(() => ({ ...mockModalImplementation }));
         ProfileModal.mockImplementation(() => ({ ...mockModalImplementation }));
         CreateGroupModal.mockImplementation(() => ({ ...mockModalImplementation }));
@@ -124,13 +118,12 @@ describe('ModalService', () => {
         });
 
         it('should show error toast if GroupInfoModal called with no data and no active group', () => {
-            // Temporarily make activeThoughtId invalid for this test
             const originalActiveThoughtId = mockApp.dataStore.state.activeThoughtId;
             mockApp.dataStore.state.activeThoughtId = 'nonexistent';
             modalService.show('groupInfo');
-            expect(GroupInfoModal).not.toHaveBeenCalled(); // Modal should not be created
+            expect(GroupInfoModal).not.toHaveBeenCalled();
             expect(mockApp.ui.showToast).toHaveBeenCalledWith("Cannot show group info: no group selected or data missing.", "error");
-            mockApp.dataStore.state.activeThoughtId = originalActiveThoughtId; // Restore
+            mockApp.dataStore.state.activeThoughtId = originalActiveThoughtId;
         });
 
 
@@ -157,29 +150,25 @@ describe('ModalService', () => {
         });
 
         it('should hide previous active modal before showing a new one', () => {
-            // Show first modal
             modalService.show('identity');
             const firstModalInstance = modalService.activeModal;
-            expect(firstModalInstance).not.toBeNull();
-            vi.clearAllMocks(); // Clear mocks for the next call check
+            vi.clearAllMocks();
 
-            // Reset mock implementations for the next instantiation
             IdentityModal.mockImplementation(() => ({ show: mockModalInstanceShowSpy, hide: mockModalInstanceHideSpy }));
             ProfileModal.mockImplementation(() => ({ show: mockModalInstanceShowSpy, hide: mockModalInstanceHideSpy }));
 
 
-            // Show second modal
             modalService.show('profile');
-            expect(mockModalInstanceHideSpy).toHaveBeenCalledTimes(1); // Previous modal's hide should be called
+            expect(mockModalInstanceHideSpy).toHaveBeenCalledTimes(1);
             expect(ProfileModal).toHaveBeenCalledWith(mockApp, mockApp.dataStore.state.identity.profile);
-            expect(mockModalInstanceShowSpy).toHaveBeenCalledTimes(1); // New modal's show
+            expect(mockModalInstanceShowSpy).toHaveBeenCalledTimes(1);
             expect(modalService.activeModal).not.toBe(firstModalInstance);
         });
     });
 
     describe('hide()', () => {
         it('should call hide on activeModal if it exists and set activeModal to null', () => {
-            modalService.show('identity'); // Sets an activeModal
+            modalService.show('identity');
             expect(modalService.activeModal).not.toBeNull();
 
             modalService.hide();
@@ -191,7 +180,7 @@ describe('ModalService', () => {
             modalService.hide();
             expect(mockModalInstanceHideSpy).not.toHaveBeenCalled();
             expect(modalService.activeModal).toBeNull();
-            expect(mockApp.ui.hideModal).toHaveBeenCalledTimes(1); // Fallback call
+            expect(mockApp.ui.hideModal).toHaveBeenCalledTimes(1);
         });
     });
 });

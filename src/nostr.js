@@ -137,7 +137,7 @@ export class Nostr extends EventEmitter {
             return signedEvent;
         } catch (err) {
             if (err instanceof AggregateError) {
-                Logger.errorWithContext('Nostr', 'Publish failed on all relays (AggregateError):', err); // Log the err itself
+                Logger.errorWithContext('Nostr', 'Publish failed on all relays (AggregateError):', err);
             } else {
                 Logger.errorWithContext('Nostr', 'Publish failed on all relays (Unknown Error):', err);
             }

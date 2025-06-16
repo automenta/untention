@@ -24,20 +24,17 @@ export class AppUIInitializer {
 
         this.app.statusBar = document.createElement('div');
         this.app.statusBar.id = 'status-bar';
-        this.app.shell.appendChild(this.app.statusBar);
+        this.app.sidebar.appendChild(this.app.statusBar);
 
-        // Instantiate child views for MainView
         const noThoughtSelectedView = new NoThoughtSelectedView();
         const noteEditorView = new NoteEditorView(this.app, this.app.dataStore);
         const messageListView = new MessageListView(this.app, this.app.dataStore);
 
-        // Pass app instance and injected views to MainView
         this.app.mainView = new MainView(this.app, {
             noThoughtSelectedView,
             noteEditorView,
             messageListView
         });
-        // Append the element property of the Component instances
         this.app.mainView.mount(this.app.shell);
 
         const identityPanel = new IdentityPanel(this.app);

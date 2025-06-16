@@ -4,7 +4,7 @@ import {Button, Component} from '../../ui.js';
 export class GroupInfoModal extends BaseModal {
     constructor(app, groupData) {
         super('Group Info', app);
-        this.groupData = groupData; // { name, id, secretKey }
+        this.groupData = groupData;
         this._contentComponent = null;
     }
 
@@ -14,10 +14,9 @@ export class GroupInfoModal extends BaseModal {
 
             if (!this.groupData || !this.groupData.id) {
                 this._contentComponent.add(new Component('p', { textContent: 'Group data is not available.' }));
-                return this.contentComponent;
+                return this._contentComponent;
             }
 
-            // Using a "form" for consistent layout, but all fields are read-only.
             const formLayout = new Component('form');
 
             formLayout.add(

@@ -322,7 +322,6 @@ export class MainView extends Component {
         this.noteEditorView = noteEditorView;
         this.messageListView = messageListView;
 
-        if (this.noThoughtSelectedView) this.noThoughtSelectedView.show(false);
         this.noteEditorView.show(false);
         this.messageListView.show(false);
 
@@ -330,7 +329,7 @@ export class MainView extends Component {
         this.input = new Component('textarea', {id: 'message-input', placeholder: 'Type your message...'});
         this.sendButton = new Button({textContent: 'Send', type: 'submit'});
         this.inputForm.add(this.input, this.sendButton);
-        if (this.inputForm) this.inputForm.show(false);
+        this.inputForm.show(false);
 
         const viewsToAdd = [this.header];
         if (this.noThoughtSelectedView && this.noThoughtSelectedView.element) viewsToAdd.push(this.noThoughtSelectedView);
