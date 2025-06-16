@@ -13,6 +13,9 @@ const ACTIVE_THOUGHT_ID_KEY = 'activeThoughtId_v3';
 const RELAYS_KEY = 'relays_v2';
 const MESSAGES_KEY_PREFIX = 'messages_'; // For individual thought messages
 
+// Message display limit, also used for in-memory message caching in the store
+const MESSAGE_DISPLAY_LIMIT = 50; // Matches MessageListView's DISPLAY_MESSAGE_LIMIT
+
 export class Data extends EventEmitter {
     constructor() {
         super();
@@ -232,6 +235,40 @@ export class Data extends EventEmitter {
                 throw err;
             }
         }
+    }
+
+    /**
+     * Adds a message to the in-memory state for a specific thought,
+     * maintains a message limit, and emits updates.
+     * @param {string} thoughtId - The ID of the thought the message belongs to.
+     * @param {object} messageData - The message object to add.
+     */
+    addMessage(thoughtId, messageData) {
+        if (!this.state.messages[thoughtId]) {
+            this.state.messages[thoughtId] = [];
+        }
+
+        // Check for duplicates by ID to prevent processing the same event multiple times
+        if (this.state.messages[thoughtId].some(msg => msg.id === messageData.id)) {
+            Logger.debugWithContext('DataStore', `Message ${messageData.id} for thought ${thoughtId} already exists, skipping.`);
+            return;
+        }
+
+        this.state.messages[thoughtId].push(messageData);
+
+        // Sort messages by created_at timestamp
+        this.state.messages[thoughtId].sort((a, b) => a.created_at - b.created_at);
+
+        // Maintain message limit
+        if (this.state.messages[thoughtId].length > MESSAGE_DISPLAY_LIMIT) {
+            this.state.messages[thoughtId] = this.state.messages[thoughtId].slice(-MESSAGE_DISPLAY_LIMIT);
+        }
+
+        // Emit specific event for message list updates
+        this.emit(`messages:${thoughtId}:updated`, this.state.messages[thoughtId]);
+
+        // Emit general state update (debounced) for other components like ThoughtList
+        this.emitStateUpdated();
     }
 
     async addRelay(url) {
