@@ -12,6 +12,21 @@ export class UIController {
     constructor() {
         this.modal = this.createModal();
         this.toastContainer = new Component('div', {className: 'toast-container'}).mount(document.body);
+        this.statusBarElement = null; // Will be set by AppUIInitializer
+        this.loadingIndicator = null; // Will be a Component instance
+    }
+
+    setStatusBarElement(element) {
+        this.statusBarElement = element;
+    }
+
+    updateStatusBar(status, count, message) {
+        if (!this.statusBarElement) return;
+
+        const statusMessage = message;
+        const statusClass = status; // e.g., 'connecting', 'connected', 'disconnected'
+
+        this.statusBarElement.innerHTML = `<div class="relay-status-icon ${statusClass}"></div><span>${count} Relays</span><span style="margin-left: auto;">${statusMessage}</span>`;
     }
 
     createModal() {
@@ -66,9 +81,22 @@ export class UIController {
     }
 
     setLoading(isLoading) {
-        document.getElementById('loading-indicator')?.remove();
         if (isLoading) {
-            document.body.insertAdjacentHTML('beforeend', `<div id="loading-indicator">${LOADING_EMOJI} Loading...</div>`);
+            if (!this.loadingIndicator) {
+                this.loadingIndicator = new Component('div', {
+                    id: 'loading-indicator',
+                    textContent: `${LOADING_EMOJI} Loading...`
+                });
+                this.loadingIndicator.mount(document.body);
+            }
+            this.loadingIndicator.show(true);
+        } else {
+            if (this.loadingIndicator) {
+                this.loadingIndicator.show(false);
+                // Optionally destroy if not needed anymore, but keeping it hidden is fine too
+                // this.loadingIndicator.destroy();
+                // this.loadingIndicator = null;
+            }
         }
     }
 }

@@ -30,7 +30,8 @@ export class IdentityService {
             else if (!skInput) sk = generateSecretKey();
             else throw new Error('Invalid secret key format.');
 
-            await this.dataStore.clearIdentity();
+            // Clear only identity-related data if overwriting/generating
+            await this.dataStore.clearIdentityOnly();
             await this.dataStore.saveIdentity(sk);
             await this.dataStore.load();
 
@@ -50,7 +51,8 @@ export class IdentityService {
             if (!skInput) {
                 try {
                     Logger.infoWithContext('IdentityService', 'Attempting to clear potentially corrupted identity state after new key generation failure.');
-                    await this.dataStore.clearIdentity();
+                    // If new key generation failed, clear the identity to prevent partial state
+                    await this.dataStore.clearIdentityOnly();
                     this.ui.showToast('Previous identity cleared due to error. Please try creating a new one again.', 'warn');
                 } catch (clearError) {
                     Logger.errorWithContext('IdentityService', 'Failed to clear identity after an error during new key generation:', clearError);
@@ -66,7 +68,7 @@ export class IdentityService {
         if (!confirm('Are you sure? This will delete all local data.')) return;
         this.ui.setLoading(true);
         try {
-            await this.dataStore.clearIdentity();
+            await this.dataStore.clearAllApplicationData();
             this.ui.showToast('Logged out.', 'info');
         } catch (e) {
             Logger.errorWithContext('IdentityService', 'Error during logout:', e);

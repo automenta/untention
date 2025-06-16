@@ -283,8 +283,38 @@ export class Data extends EventEmitter {
         await this.saveRelays();
     }
 
-    async resetApplicationData() {
-        Logger.infoWithContext('DataStore', 'Attempting to reset application data from storage.');
+    async clearIdentityOnly() {
+        Logger.infoWithContext('DataStore', 'Clearing identity data from storage.');
+        let clearSuccessful = true;
+        try {
+            const currentPk = this.state.identity.pk;
+            await localforage.removeItem(IDENTITY_KEY);
+            if (currentPk && this.state.profiles[currentPk]) {
+                // Optionally remove the profile associated with the old identity
+                // For now, we'll just clear the in-memory profile and let it be overwritten on next load
+            }
+        } catch (err) {
+            Logger.errorWithContext('DataStore', 'Failed to clear identity from storage:', err);
+            clearSuccessful = false;
+        }
+
+        this.setState(state => {
+            state.identity = {sk: null, pk: null, profile: null};
+            // Also clear the profile from the profiles map if it was the current user's
+            if (state.profiles[state.identity.pk]) {
+                delete state.profiles[state.identity.pk];
+            }
+        });
+        this.emitStateUpdated();
+
+        if (!clearSuccessful) {
+            throw new Error('Failed to completely clear identity data from storage. Some old data might remain.');
+        }
+        Logger.infoWithContext('DataStore', 'Identity data cleared successfully.');
+    }
+
+    async clearAllApplicationData() {
+        Logger.infoWithContext('DataStore', 'Attempting to reset all application data from storage.');
         let resetCompletelySuccessful = true;
         try {
             const keys = await localforage.keys();
@@ -294,7 +324,8 @@ export class Data extends EventEmitter {
                     key.startsWith(THOUGHTS_KEY) ||
                     key.startsWith(PROFILES_KEY) ||
                     key.startsWith(ACTIVE_THOUGHT_ID_KEY) ||
-                    key.startsWith(MESSAGES_KEY_PREFIX)
+                    key.startsWith(MESSAGES_KEY_PREFIX) ||
+                    key.startsWith(RELAYS_KEY) // Ensure relays are also cleared on full reset
                 )
                 .map(key =>
                     localforage.removeItem(key).catch(err => {
@@ -304,26 +335,13 @@ export class Data extends EventEmitter {
                 );
             await Promise.all(removalPromises);
         } catch (err) {
-            Logger.errorWithContext('DataStore', 'Critical error during resetApplicationData (e.g., accessing localforage.keys):', err);
+            Logger.errorWithContext('DataStore', 'Critical error during clearAllApplicationData (e.g., accessing localforage.keys):', err);
             resetCompletelySuccessful = false;
             throw new Error(`Critical failure during application data reset setup: ${err.message}`);
         }
 
         this.setState(state => {
-            state.identity = {sk: null, pk: null, profile: null};
-            state.thoughts = {
-                public: {
-                    id: 'public',
-                    name: 'Public Feed',
-                    type: 'public',
-                    unread: 0,
-                    lastEventTimestamp: 0
-                }
-            };
-            state.messages = {};
-            state.profiles = {};
-            state.activeThoughtId = 'public';
-            state.fetchingProfiles = new Set();
+            Object.assign(state, this._getDefaultState()); // Reset to default state
         });
         this.emitStateUpdated();
 

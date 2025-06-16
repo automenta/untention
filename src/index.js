@@ -43,24 +43,23 @@ export class App {
             const uiInitializer = new AppUIInitializer(this, this.ui);
             uiInitializer.setupDOM();
 
+            // Register status bar listener AFTER DOM is set up
             this.nostr.on('connection:status', ({status, count}) => {
-            const statusMessage = {connecting: "Connecting...", connected: "Connected", disconnected: "Disconnected"}[status];
-            if (this.statusBar) {
-                this.statusBar.setContent(`<div class="relay-status-icon ${status}"></div><span>${count} Relays</span><span style="margin-left: auto;">${statusMessage}</span>`);
-            }
-        });
+                const statusMessage = {connecting: "Connecting...", connected: "Connected", disconnected: "Disconnected"}[status];
+                this.ui.updateStatusBar(status, count, statusMessage);
+            });
 
-        this.dataStore.on('state:updated', ({identity}) => {
-            if (this.currentPk !== undefined && this.currentPk !== identity.pk) {
-                this.currentPk = identity.pk;
-                this.nostr.connect();
-            }
-        });
+            this.dataStore.on('state:updated', ({identity}) => {
+                if (this.currentPk !== undefined && this.currentPk !== identity.pk) {
+                    this.currentPk = identity.pk;
+                    this.nostr.connect();
+                }
+            });
 
-        await this.dataStore.load();
-        if (!this.dataStore.state.identity.sk) {
-            this.modalService.show('identity');
-        }
+            await this.dataStore.load();
+            if (!this.dataStore.state.identity.sk) {
+                this.modalService.show('identity');
+            }
             this.currentPk = this.dataStore.state.identity.pk;
             this.nostr.connect();
             await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[this.dataStore.state.activeThoughtId]);

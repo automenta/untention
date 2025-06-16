@@ -22,9 +22,10 @@ export class AppUIInitializer {
         this.app.sidebar.id = 'sidebar';
         this.app.shell.appendChild(this.app.sidebar);
 
-        this.app.statusBar = document.createElement('div');
-        this.app.statusBar.id = 'status-bar';
-        this.app.sidebar.appendChild(this.app.statusBar);
+        const statusBarElement = document.createElement('div');
+        statusBarElement.id = 'status-bar';
+        this.app.sidebar.appendChild(statusBarElement);
+        this.uiController.setStatusBarElement(statusBarElement); // Pass the element to UIController
 
         const noThoughtSelectedView = new NoThoughtSelectedView();
         const noteEditorView = new NoteEditorView(this.app, this.app.dataStore);
@@ -42,7 +43,5 @@ export class AppUIInitializer {
 
         const thoughtList = new ThoughtList(this.app);
         thoughtList.mount(this.app.sidebar);
-
-        this.uiController.statusBar = this.app.statusBar;
     }
 }
