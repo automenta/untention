@@ -1,4 +1,4 @@
-import { Component, Button } from '/ui/ui.js';
+import { Component, Button } from '/ui.js';
 // Utils file is no longer directly used here after its disassembly.
 // Specific utilities would be imported if needed. For now, none are.
 

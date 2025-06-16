@@ -1,5 +1,5 @@
 import { MainView, IdentityPanel, ThoughtList, MessageListView, NoThoughtSelectedView, NoteEditorView } from '/components.js';
-import { Component } from '/ui/ui.js';
+import { Component } from '/ui.js';
 
 export class AppUIInitializer {
     constructor(app, uiController) {

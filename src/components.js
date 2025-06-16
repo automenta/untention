@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { Component, Button } from '/ui/ui.js';
+import { Component, Button } from '/ui.js';
 import { Logger } from '/logger.js'; // Assuming Logger might be used, good practice to include
 // No direct use of EventEmitter in this file's classes, but keeping for potential (though unlikely) module-level use.
 import { EventEmitter } from '/event-emitter.js';
