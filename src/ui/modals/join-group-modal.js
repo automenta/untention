@@ -1,6 +1,6 @@
 import {BaseModal} from './modal.js';
 import {Button, Component} from '../../ui.js';
-import {Logger} from '/logger.js';
+import {Logger} from '@/logger.js';
 
 export class JoinGroupModal extends BaseModal {
     constructor(app) {

@@ -1,4 +1,4 @@
-import {Logger} from '/logger.js';
+import {Logger} from '@/logger.js';
 import {aesDecrypt} from '/utils/crypto-utils.js';
 import {findTag, shortenPubkey} from '/utils/nostr-utils.js';
 import {now} from '/utils/time-utils.js';

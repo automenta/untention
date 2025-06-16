@@ -1,4 +1,4 @@
-import {Logger} from '/logger.js';
+import {Logger} from '@/logger.js';
 
 export class RelayManagerService {
     constructor(dataStore, nostr, ui) {

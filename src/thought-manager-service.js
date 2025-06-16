@@ -1,4 +1,4 @@
-import {Logger} from '/logger.js';
+import {Logger} from '@/logger.js';
 import localforage from 'localforage';
 import {now} from '/utils/time-utils.js';
 
