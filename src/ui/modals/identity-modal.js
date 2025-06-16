@@ -1,5 +1,5 @@
 import { BaseModal } from './modal.js';
-import { Component, Button } from '/ui.js'; // Assuming Component and Button are in '../ui.js'
+import { Component, Button } from '/ui/ui.js'; // Assuming Component and Button are in '../ui.js'
 
 // Re-evaluating the submit button:
 // The form component is created in getContent().
