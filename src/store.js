@@ -110,7 +110,7 @@ export class Data extends EventEmitter {
                      Logger.warnWithContext('DataStore', 'Loaded relays were all invalid. User may need to reconfigure.');
                      this.state.relays = [];
                 } else {
-                    this.state.relays = [];
+                    this.state.relays = defaultRelays;
                 }
             } else {
                 this.state.relays = defaultRelays;
@@ -286,13 +286,9 @@ export class Data extends EventEmitter {
     async clearIdentityOnly() {
         Logger.infoWithContext('DataStore', 'Clearing identity data from storage.');
         let clearSuccessful = true;
+        const currentPk = this.state.identity.pk; // Capture current PK before clearing state
         try {
-            const currentPk = this.state.identity.pk;
             await localforage.removeItem(IDENTITY_KEY);
-            if (currentPk && this.state.profiles[currentPk]) {
-                // Optionally remove the profile associated with the old identity
-                // For now, we'll just clear the in-memory profile and let it be overwritten on next load
-            }
         } catch (err) {
             Logger.errorWithContext('DataStore', 'Failed to clear identity from storage:', err);
             clearSuccessful = false;
@@ -300,9 +296,8 @@ export class Data extends EventEmitter {
 
         this.setState(state => {
             state.identity = {sk: null, pk: null, profile: null};
-            // Also clear the profile from the profiles map if it was the current user's
-            if (state.profiles[state.identity.pk]) {
-                delete state.profiles[state.identity.pk];
+            if (currentPk && state.profiles[currentPk]) { // Use captured PK to remove old profile
+                delete state.profiles[currentPk];
             }
         });
         this.emitStateUpdated();
@@ -325,7 +320,7 @@ export class Data extends EventEmitter {
                     key.startsWith(PROFILES_KEY) ||
                     key.startsWith(ACTIVE_THOUGHT_ID_KEY) ||
                     key.startsWith(MESSAGES_KEY_PREFIX) ||
-                    key.startsWith(RELAYS_KEY) // Ensure relays are also cleared on full reset
+                    key.startsWith(RELAYS_KEY)
                 )
                 .map(key =>
                     localforage.removeItem(key).catch(err => {
@@ -341,7 +336,7 @@ export class Data extends EventEmitter {
         }
 
         this.setState(state => {
-            Object.assign(state, this._getDefaultState()); // Reset to default state
+            Object.assign(state, this._getDefaultState());
         });
         this.emitStateUpdated();
 

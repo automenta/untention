@@ -90,9 +90,6 @@ class NoThoughtSelectedView extends Component {
             </div>
         `);
     }
-
-    update(app, dataStore, activeThoughtId, thoughts, profiles, identity) {
-    }
 }
 
 class NoteEditorView extends Component {
