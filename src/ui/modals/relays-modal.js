@@ -1,7 +1,7 @@
 import { BaseModal } from './modal.js';
-import { Component, Button } from '../../ui.js';
-import { escapeHtml } from '../../utils/ui-utils.js'; // Import escapeHtml directly
-import { validateRelayUrl } from '../../utils/nostr-utils.js';
+import { Component, Button } from '/ui.js';
+import { escapeHtml } from '/utils/ui-utils.js'; // Import escapeHtml directly
+import { validateRelayUrl } from '/utils/nostr-utils.js';
 
 export class RelaysModal extends BaseModal {
     constructor(app, relaysList) {
@@ -99,7 +99,7 @@ export class RelaysModal extends BaseModal {
                     addButtonComponent.element.disabled = false;
                 } else {
                     urlInputComponent.element.classList.add('invalid');
-                    errorSpan.element.textContent = 'Invalid relay URL (must start with wss://)';
+                    errorSpan.textContent = 'Invalid relay URL (must start with wss://)';
                     addButtonComponent.element.disabled = true;
                 }
             };

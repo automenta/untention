@@ -1,9 +1,9 @@
 const {generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19, nip04, SimplePool} = NostrTools;
 
-import { EventEmitter } from './event-emitter.js';
-import { Logger } from './logger.js';
-import { now } from './utils/time-utils.js';
-import { NostrEventProcessor } from './nostr-event-processor.js';
+import { EventEmitter } from '/event-emitter.js';
+import { Logger } from '/logger.js';
+import { now } from '/utils/time-utils.js';
+import { NostrEventProcessor } from '/nostr-event-processor.js';
 
 const PROFILE_KIND = 0;
 const TEXT_NOTE_KIND = 1;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GroupInfoModal } from './group-info-modal.js';
-import { Component, Button } from '../ui.js';
+import { Component, Button } from '/ui.js';
 
 const mockApp = {
     ui: {

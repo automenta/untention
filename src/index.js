@@ -1,29 +1,29 @@
-import { Logger } from "./logger.js";
+import { Logger } from "/logger.js";
 // Initialize Logger Debug Mode (e.g., based on localStorage or a build flag)
 // To enable debug mode via console: Logger.setDebugMode(true)
 // Or: Logger.setDebugMode(localStorage.getItem('APP_DEBUG_MODE') === 'true');
 Logger.setDebugMode(false);
 
 // Specific crypto utils used in this file:
-import { hexToBytes, aesEncrypt, exportKeyAsBase64 } from "./utils/crypto-utils.js";
+import { hexToBytes, aesEncrypt, exportKeyAsBase64 } from "/utils/crypto-utils.js";
 // Specific time utils used in this file:
-import { now } from "./utils/time-utils.js";
+import { now } from "/utils/time-utils.js";
 // Specific nostr utils used in this file:
-import { shortenPubkey } from "./utils/nostr-utils.js";
+import { shortenPubkey } from "/utils/nostr-utils.js";
 // Other utils like validateRelayUrl, findTag, ui-utils are not directly used in App class methods here,
 // but might be used in other modules that App interacts with.
 
-import { Button, Component } from "./ui.js";
-import { ModalService } from "./modal-service.js"; // Import ModalService
-import {Nostr} from "./nostr.js";
-import { Data } from './store.js';
-import { UIController } from './ui-controller.js';
-import { AppUIInitializer } from './app-ui-initializer.js';
-import { RelayManagerService } from './relay-manager-service.js';
-import { IdentityService } from './identity-service.js';
-import { ThoughtManagerService } from './thought-manager-service.js';
-import { NostrPublishService } from './nostr-publish-service.js';
-import { ThoughtCreationService } from './thought-creation-service.js';
+import { Button, Component } from "/ui.js";
+import { ModalService } from "/modal-service.js"; // Import ModalService
+import {Nostr} from "/nostr.js";
+import { Data } from '/store.js';
+import { UIController } from '/ui-controller.js';
+import { AppUIInitializer } from '/app-ui-initializer.js';
+import { RelayManagerService } from '/relay-manager-service.js';
+import { IdentityService } from '/identity-service.js';
+import { ThoughtManagerService } from '/thought-manager-service.js';
+import { NostrPublishService } from '/nostr-publish-service.js';
+import { ThoughtCreationService } from '/thought-creation-service.js';
 
 // NostrTools is loaded globally via script tag in index.html, so no destructuring needed here.
 // const {generateSecretKey, nip19, nip04 } = NostrTools; // Removed redundant destructuring

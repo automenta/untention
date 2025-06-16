@@ -1,5 +1,5 @@
 import { BaseModal } from './modal.js';
-import { Component, Button } from '../../ui.js';
+import { Component, Button } from '/ui.js';
 
 export class CreateGroupModal extends BaseModal {
     constructor(app) {

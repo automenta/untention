@@ -1,4 +1,4 @@
-import { Component, Button } from '../../ui.js'; // Assuming Button is also in ui.js
+import { Component, Button } from '/ui.js'; // Assuming Button is also in ui.js
 
 export class BaseModal {
     constructor(title, app) {

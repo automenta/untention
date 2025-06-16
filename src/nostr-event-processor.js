@@ -1,7 +1,7 @@
-import { Logger } from './logger.js';
-import { aesDecrypt } from './utils/crypto-utils.js';
-import { findTag, shortenPubkey } from './utils/nostr-utils.js';
-import { now } from './utils/time-utils.js';
+import { Logger } from '/logger.js';
+import { aesDecrypt } from '/utils/crypto-utils.js';
+import { findTag, shortenPubkey } from '/utils/nostr-utils.js';
+import { now } from '/utils/time-utils.js';
 // NostrTools is expected to be available globally
 const { nip04, verifyEvent } = NostrTools;
 

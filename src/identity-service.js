@@ -1,5 +1,5 @@
-import { Logger } from './logger.js';
-import { hexToBytes } from './utils/crypto-utils.js';
+import { Logger } from '/logger.js';
+import { hexToBytes } from '/utils/crypto-utils.js';
 
 // NostrTools is expected to be available globally
 const { nip19, generateSecretKey } = NostrTools;

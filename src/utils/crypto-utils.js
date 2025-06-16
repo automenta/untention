@@ -29,23 +29,21 @@ export const base64ToUint8Array = s => new Uint8Array(atob(s).split("").map(c =>
 
 // Original Utils.crypto methods, now top-level exports
 export const aesEncrypt = async (plainText, keyBase64) => {
-    const key = await importKeyFromBase64(keyBase64); // Changed: Utils.crypto.importKeyFromBase64 -> importKeyFromBase64
+    const key = await importKeyFromBase64(keyBase64);
     const iv = crypto.getRandomValues(new Uint8Array(12)); // AES-GCM standard IV size is 12 bytes (96 bits)
     const cipherText = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, key, new TextEncoder().encode(plainText));
-    // Changed: Utils.uint8ArrayToBase64 -> uint8ArrayToBase64
     return `${uint8ArrayToBase64(iv)}:${uint8ArrayToBase64(new Uint8Array(cipherText))}`;
 };
 
 export const aesDecrypt = async (encryptedData, keyBase64) => {
     try {
-        const key = await importKeyFromBase64(keyBase64); // Changed: Utils.crypto.importKeyFromBase64 -> importKeyFromBase64
+        const key = await importKeyFromBase64(keyBase64);
         const [ivBase64, cipherTextBase64] = encryptedData.split(':');
         if (!ivBase64 || !cipherTextBase64) throw new Error('Invalid encrypted data format');
         const plainText = await crypto.subtle.decrypt({
             name: "AES-GCM",
-            // Changed: Utils.base64ToUint8Array -> base64ToUint8Array
             iv: base64ToUint8Array(ivBase64)
-        }, key, base64ToUint8Array(cipherTextBase64)); // Changed: Utils.base64ToUint8Array -> base64ToUint8Array
+        }, key, base64ToUint8Array(cipherTextBase64));
         return new TextDecoder().decode(plainText);
     } catch (err) {
         throw err; // Rethrow to allow caller to handle UI, logging, etc.
@@ -53,11 +51,9 @@ export const aesDecrypt = async (encryptedData, keyBase64) => {
 };
 
 export const exportKeyAsBase64 = async key => {
-    // Changed: Utils.uint8ArrayToBase64 -> uint8ArrayToBase64
     return uint8ArrayToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", key)));
 };
 
 export const importKeyFromBase64 = keyBase64 => {
-    // Changed: Utils.base64ToUint8Array -> base64ToUint8Array
     return crypto.subtle.importKey("raw", base64ToUint8Array(keyBase64), {name: "AES-GCM"}, true, ["encrypt", "decrypt"]);
 };

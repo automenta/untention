@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IdentityModal } from './identity-modal.js';
-import { Component, Button } from '../ui.js';
+import { Component, Button } from '/ui.js';
 
 // Mock App, UIController, and DataStore
 const mockApp = {

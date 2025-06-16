@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProfileModal } from './profile-modal.js';
-import { Component, Button } from '../ui.js';
+import { Component, Button } from '/ui.js';
 
 const mockApp = {
     ui: {
