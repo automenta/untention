@@ -35,4 +35,8 @@ module.exports = {
       },
     },
   },
+  globals: {
+    // Declare global variables that are not imported
+    NostrTools: 'readonly', // Assuming NostrTools is loaded via a script tag and is read-only
+  },
 };
