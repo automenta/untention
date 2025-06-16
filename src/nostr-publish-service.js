@@ -45,7 +45,7 @@ export class NostrPublishService {
             const signedEvent = await this.nostr.publish(eventTemplate);
             // processMessage might need to be called from App or a different service if it updates broad app state
             // For now, keeping it here as it was in App.sendMessage
-            await this.nostr.processMessage({...signedEvent, content}, activeThoughtId);
+            await this.nostr.eventProcessor.processMessage({...signedEvent, content}, activeThoughtId);
             this.ui.showToast('Message sent!', 'success');
         } catch (e) {
             Logger.error('Send message error:', e);
@@ -87,7 +87,7 @@ export class NostrPublishService {
             });
             // processKind0 might also be a candidate for moving if it broadly affects app state
             // For now, keeping it here as it was in App.updateProfile
-            await this.nostr.processKind0(event);
+            await this.nostr.eventProcessor.processKind0(event);
             this.ui.showToast('Profile updated!', 'success');
         } catch (e) {
             Logger.error('Update profile error:', e); // Log full error

@@ -57,7 +57,7 @@ export class ThoughtManagerService {
     async leaveThought() {
         const {activeThoughtId, thoughts} = this.dataStore.state;
         const thoughtToLeave = thoughts[activeThoughtId];
-        if (!thoughtToLeave || !confirm(`Leave/hide ${thoughtToLeave.type} "${thoughtToLeave.name}"?`)) return;
+        if (!thoughtToLeave || !confirm(`Are you sure you want to remove ${thoughtToLeave.type} "${thoughtToLeave.name}"? This will only hide it from your list, not delete it from Nostr.`)) return;
 
         this.ui.setLoading(true);
         try {

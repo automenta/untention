@@ -98,59 +98,6 @@ export class App {
     }
 
     /**
-     * Handles selecting a new thought (e.g., a chat, DM, or note).
-     * Updates the application state to reflect the new active thought,
-     * marks messages as read, saves changes, and fetches relevant messages.
-     * @param {string} id - The ID of the thought to select.
-     */
-    async selectThought(id) {
-        this.ui.setLoading(true);
-        try {
-            const currentActiveThoughtId = this.dataStore.state.activeThoughtId;
-            const thoughts = this.dataStore.state.thoughts;
-            // Determine the new active thought ID; defaults to DEFAULT_THOUGHT_ID if the given id is invalid
-            const newActiveThoughtId = thoughts[id] ? id : DEFAULT_THOUGHT_ID;
-
-            const thoughtToUpdate = thoughts[newActiveThoughtId];
-            // Flag to check if the unread count actually changes to avoid unnecessary save operations.
-            let unreadActuallyChanged = false;
-
-            // Check if the thought's unread status actually needs to change to avoid unnecessary saves
-            if (thoughtToUpdate && thoughtToUpdate.unread > 0) {
-                unreadActuallyChanged = true;
-            }
-
-            // Update the state: set the new active thought ID and reset its unread count
-            this.dataStore.setState(s => {
-                s.activeThoughtId = newActiveThoughtId;
-                if (s.thoughts[newActiveThoughtId]) {
-                    s.thoughts[newActiveThoughtId].unread = 0;
-                }
-            });
-
-            // If the active thought has genuinely changed, save this preference
-            if (currentActiveThoughtId !== newActiveThoughtId) {
-                await this.dataStore.saveActiveThoughtId();
-            }
-            // If the unread count was reset, save the updated thoughts data
-            if (unreadActuallyChanged) {
-                await this.dataStore.saveThoughts();
-            }
-
-            // If the active thought changed, load its messages and fetch historical ones
-            if (currentActiveThoughtId !== newActiveThoughtId) {
-                await this.dataStore.loadMessages(newActiveThoughtId);
-                await this.nostr.fetchHistoricalMessages(this.dataStore.state.thoughts[newActiveThoughtId]);
-            }
-        } catch (e) {
-            Logger.errorWithContext('App', `Error selecting thought ${id}:`, e);
-            this.ui.showToast(`Failed to load thought: ${e.message || 'An unexpected error occurred while selecting the thought.'}`, 'error');
-        } finally {
-            this.ui.setLoading(false);
-        }
-    }
-
-    /**
      * Centralized handler for dispatching actions triggered by UI components or other parts of the application.
      * @param {string} action - The name of the action to perform.
      * @param {any} data - Optional data associated with the action.
