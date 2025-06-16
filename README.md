@@ -40,6 +40,8 @@ Here are the essential scripts for development and building:
 -   `npm run test:coverage`: Runs unit tests and generates a code coverage report.
 -   `npm run lint`: Runs ESLint to check for code quality and style issues.
 -   `npm run format`: Runs Prettier to automatically format your code according to defined style rules.
+-   `npm run clean`: Removes build artifacts (`dist/`, `.vite/`) and test reports (`coverage/`).
+-   `npm run security:audit`: Runs `npm audit` to check for security vulnerabilities in dependencies.
 -   `npm run build:analyze`: Performs a production build and then generates an interactive bundle size report (`dist/bundle-report.html`), helping identify large dependencies.
 -   `npm run prepare`: Sets up Husky Git hooks (automatically run after `npm install`).
 
