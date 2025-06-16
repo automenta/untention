@@ -12,8 +12,8 @@ export class UIController {
     constructor() {
         this.modal = this.createModal();
         this.toastContainer = new Component('div', {className: 'toast-container'}).mount(document.body);
-        this.statusBarElement = null; // Will be set by AppUIInitializer
-        this.loadingIndicator = null; // Will be a Component instance
+        this.statusBarElement = null;
+        this.loadingIndicator = null;
     }
 
     setStatusBarElement(element) {
@@ -24,7 +24,7 @@ export class UIController {
         if (!this.statusBarElement) return;
 
         const statusMessage = message;
-        const statusClass = status; // e.g., 'connecting', 'connected', 'disconnected'
+        const statusClass = status;
 
         this.statusBarElement.innerHTML = `<div class="relay-status-icon ${statusClass}"></div><span>${count} Relays</span><span style="margin-left: auto;">${statusMessage}</span>`;
     }
@@ -43,7 +43,7 @@ export class UIController {
         modalContent.innerHTML = '';
 
         const titleElement = new Component('h3', {textContent: title}).element;
-        const bodyElement = body.element || body;
+        const bodyElement = body.element;
         const buttonsContainer = new Component('div', {className: 'modal-buttons'});
         buttons.forEach(button => buttonsContainer.add(button));
 
@@ -93,9 +93,6 @@ export class UIController {
         } else {
             if (this.loadingIndicator) {
                 this.loadingIndicator.show(false);
-                // Optionally destroy if not needed anymore, but keeping it hidden is fine too
-                // this.loadingIndicator.destroy();
-                // this.loadingIndicator = null;
             }
         }
     }
