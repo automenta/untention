@@ -21,7 +21,7 @@ export class AppUIInitializer {
         this.app.shell.appendChild(this.app.statusBar);
 
         // Instantiate child views for MainView
-        const noThoughtSelectedView = new NoThoughtSelectedView(); // Assuming no args or app if not needed for constructor
+        const noThoughtSelectedView = new NoThoughtSelectedView();
         const noteEditorView = new NoteEditorView(this.app, this.app.dataStore);
         const messageListView = new MessageListView(this.app, this.app.dataStore);
 
@@ -31,13 +31,14 @@ export class AppUIInitializer {
             noteEditorView,
             messageListView
         });
-        this.app.shell.appendChild(this.app.mainView.render()); // Assuming render() returns the element
+        // Append the element property of the Component instances
+        this.app.mainView.mount(this.app.shell);
 
         const identityPanel = new IdentityPanel(this.app);
-        this.app.sidebar.appendChild(identityPanel.render());
+        identityPanel.mount(this.app.sidebar);
 
         const thoughtList = new ThoughtList(this.app);
-        this.app.sidebar.appendChild(thoughtList.render());
+        thoughtList.mount(this.app.sidebar);
 
         this.uiController.statusBar = this.app.statusBar;
     }

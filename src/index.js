@@ -25,7 +25,8 @@ import { ThoughtManagerService } from './thought-manager-service.js';
 import { NostrPublishService } from './nostr-publish-service.js';
 import { ThoughtCreationService } from './thought-creation-service.js';
 
-const {generateSecretKey, nip19, nip04 } = NostrTools;
+// NostrTools is loaded globally via script tag in index.html, so no destructuring needed here.
+// const {generateSecretKey, nip19, nip04 } = NostrTools; // Removed redundant destructuring
 
 // Define Nostr event kinds as constants for clarity and maintainability
 const TEXT_NOTE_KIND = 1;
@@ -168,174 +169,20 @@ export class App {
             'leave-thought': () => this.thoughtManagerService.leaveThought(),
             'send-message': (content) => this.nostrPublishService.sendMessage(content),
             'update-profile': (formData) => this.nostrPublishService.updateProfile(formData),
-            'create-dm': (formData) => this.createDmThought(formData.get('pubkey')),
-            'create-group': (formData) => this.createGroupThought(formData.get('name')),
-            'join-group': (formData) => this.joinGroupThought(formData.get('id'), formData.get('key'), formData.get('name')),
+            'create-dm': (formData) => this.thoughtCreationService.createDmThought(formData.get('pubkey')),
+            'create-group': (formData) => this.thoughtCreationService.createGroupThought(formData.get('name')),
+            'join-group': (formData) => this.thoughtCreationService.joinGroupThought(formData.get('id'), formData.get('key'), formData.get('name')),
             'add-relay': (formData) => this.relayManagerService.addRelay(formData.get('url')),
             'remove-relay': (url) => this.relayManagerService.removeRelay(url),
-            'create-note': () => this.createNoteThought(),
+            'create-note': () => this.thoughtCreationService.createNoteThought(),
         };
         if (actions[action]) actions[action](data);
     }
 
-    async leaveThought() {
-        const {activeThoughtId, thoughts} = this.dataStore.state;
-        const thoughtToLeave = thoughts[activeThoughtId]; // Renamed 't' to 'thoughtToLeave'
-        if (!thoughtToLeave || !confirm(`Leave/hide ${thoughtToLeave.type} "${thoughtToLeave.name}"?`)) return;
-        this.ui.setLoading(true);
-        try {
-            // Remove the thought and its messages from the state
-            this.dataStore.setState(s => {
-                delete s.thoughts[activeThoughtId];
-                delete s.messages[activeThoughtId];
-            });
-            // Persist changes: remove messages from localforage and save updated thoughts list
-            await Promise.all([localforage.removeItem(`messages_${activeThoughtId}`), this.dataStore.saveThoughts()]);
-            // Select the default public thought after leaving one
-            await this.selectThought(DEFAULT_THOUGHT_ID);
-            this.ui.showToast('Thought removed.', 'info');
-            this.ui.showToast(`Switched to ${DEFAULT_THOUGHT_ID} chat.`, 'info'); // Use constant
-        } catch (e) {
-            Logger.errorWithContext('App', `Error leaving thought ${activeThoughtId}:`, e);
-            this.ui.showToast(`Failed to remove thought: ${e.message || 'An unexpected error occurred while removing the thought.'}`, 'error');
-        } finally {
-            this.ui.setLoading(false);
-        }
-    }
-
-    async createDmThought(pubkeyInput) {
-        this.ui.hideModal();
-        // setLoading can be called after initial checks if preferred
-        try {
-            if (!this.dataStore.state.identity.sk) throw new Error('Login to create DMs.');
-            let pk = pubkeyInput.startsWith('npub') ? nip19.decode(pubkeyInput).data : pubkeyInput;
-            if (!/^[0-9a-fA-F]{64}$/.test(pk)) throw new Error('Invalid public key.');
-            if (pk === this.dataStore.state.identity.pk) throw new Error("Cannot DM yourself.");
-            if (!this.dataStore.state.thoughts[pk]) {
-                this.dataStore.setState(s => s.thoughts[pk] = {
-                    id: pk,
-                    name: shortenPubkey(pk), // Changed from Utils.shortenPubkey
-                    type: 'dm',
-                    pubkey: pk,
-                    unread: 0,
-                    lastEventTimestamp: now() // Changed from Utils.now()
-                });
-                await this.dataStore.saveThoughts();
-                await this.nostr.fetchProfile(pk);
-            }
-            this.selectThought(pk);
-            this.ui.showToast(`DM started.`, 'success');
-        } catch (e) {
-            this.ui.showToast(`Error creating DM: ${e.message || 'An unexpected error occurred while creating the DM.'}`, 'error');
-        }
-        // No finally setLoading(false) here as it's a quick op or error is shown
-    }
-
-    async createGroupThought(name) {
-        this.ui.hideModal();
-        if (!this.dataStore.state.identity.sk) return this.ui.showToast('Login to create groups.', 'error');
-        if (!name) return this.ui.showToast('Group name is required.', 'error');
-        this.ui.setLoading(true);
-        try {
-            const id = crypto.randomUUID();
-            const key = await exportKeyAsBase64(await crypto.subtle.generateKey({ // Changed from Utils.crypto.exportKeyAsBase64
-                name: "AES-GCM",
-                length: 256
-            }, true, ["encrypt", "decrypt"]));
-            this.dataStore.setState(s => s.thoughts[id] = {
-                id,
-                name,
-                type: 'group',
-                secretKey: key,
-                unread: 0,
-                lastEventTimestamp: now() // Changed from Utils.now()
-            });
-            await this.dataStore.saveThoughts();
-            this.selectThought(id);
-            this.ui.showToast(`Group "${name}" created.`, 'success');
-            this.modalService.show('groupInfo'); // Use ModalService
-        } catch (e) {
-            Logger.errorWithContext('App', 'Error creating group thought:', e);
-            this.ui.showToast(`Failed to create group: ${e.message || 'An unexpected error occurred while creating the group.'}`, 'error');
-        } finally {
-            this.ui.setLoading(false);
-        }
-    }
-
-    async joinGroupThought(id, key, name) {
-        this.ui.hideModal();
-        if (!this.dataStore.state.identity.sk) return this.ui.showToast('Login to join groups.', 'error');
-        if (this.dataStore.state.thoughts[id]) return this.ui.showToast(`Already in group.`, 'warn');
-        if (!id || !key || !name) return this.ui.showToast('All fields are required.', 'error');
-        this.ui.setLoading(true);
-        try {
-            atob(key); // Basic check for Base64
-            this.dataStore.setState(s => s.thoughts[id] = {
-                id,
-                name,
-                type: 'group',
-                secretKey: key,
-                unread: 0,
-                lastEventTimestamp: now() // Changed from Utils.now()
-            });
-            await this.dataStore.saveThoughts();
-            this.selectThought(id);
-            this.ui.showToast(`Joined group "${name}".`, 'success');
-        } catch (e) {
-            Logger.errorWithContext('App', 'Error joining group thought:', e);
-            this.ui.showToast(`Failed to join group: ${e.message || 'An unexpected error occurred while joining the group.'}`, 'error');
-        } finally {
-            this.ui.setLoading(false);
-        }
-    }
-
-    async createNoteThought() {
-        if (!this.dataStore.state.identity.sk) {
-            this.ui.showToast('Login to create notes.', 'error');
-            return;
-        }
-        this.ui.setLoading(true);
-        try {
-            const newId = crypto.randomUUID(); // Generate a unique ID for the new note.
-            let noteName = 'New Note';
-            // Ensure the note name is unique by appending a number if "New Note" or "New Note X" already exists.
-            const existingNames = new Set(Object.values(this.dataStore.state.thoughts)
-                                            .filter(t => t.type === 'note')
-                                            .map(t => t.name));
-            if (existingNames.has(noteName)) {
-                let i = 1;
-                while (existingNames.has(`New Note ${i}`)) {
-                    i++;
-                }
-                noteName = `New Note ${i}`; // Found a unique name like "New Note 1", "New Note 2", etc.
-            }
-
-            const newNote = {
-                id: newId,
-                name: noteName,
-                type: 'note',
-                body: '',
-                lastEventTimestamp: now(), // Changed from Utils.now()
-                unread: 0
-            };
-            this.dataStore.setState(s => {
-                s.thoughts[newId] = newNote;
-            });
-            await this.dataStore.saveThoughts();
-            this.selectThought(newId);
-            this.ui.showToast('Note created.', 'success');
-        } catch (e) {
-            Logger.errorWithContext('App', 'Error creating note thought:', e);
-            this.ui.showToast(`Failed to create note: ${e.message || 'An unexpected error occurred while creating the note.'}`, 'error');
-        } finally {
-            this.ui.setLoading(false);
-        }
-    }
-
-    async updateRelaysList(newRelays) {
-        this.relayManagerService.updateRelaysList(newRelays);
-    }
-
+    // The following methods (leaveThought, createDmThought, createGroupThought, joinGroupThought, createNoteThought, updateRelaysList)
+    // have been moved to their respective service classes (ThoughtManagerService, ThoughtCreationService, RelayManagerService).
+    // They are now called via `this.thoughtManagerService.leaveThought()`, etc., from `handleAction`.
+    // Therefore, they are removed from the App class to avoid duplication.
 }
 
 document.addEventListener('DOMContentLoaded', () => new App());

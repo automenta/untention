@@ -148,7 +148,7 @@ class NoteEditorView extends Component {
 
 class MessageListView extends Component {
     constructor(app, dataStore) {
-        super('div', { id: 'message-list-view' }); // Changed ID to avoid conflict if old one is still there
+        super('div', { id: 'message-list' }); // Changed ID to match CSS
         this.app = app;
         this.dataStore = dataStore;
         this.messagesContainer = new Component('div', { id: 'message-list-container' }); // Inner container for messages
@@ -420,18 +420,16 @@ export class MainView extends Component {
         }
 
         this.renderHeader(thought, profiles || {});
-        this.inputForm.show(!!identity.sk && thought.type !== 'note' && thought.type !== 'public'); // Show input form for DMs and groups if logged in
+        
+        // Simplified input form visibility logic
+        const showInput = !!identity.sk && (thought.type === 'public' || thought.type === 'dm' || thought.type === 'group');
+        this.inputForm.show(showInput);
 
         if (thought.type === 'note') {
             this.noteEditorView.update(thought);
         } else {
             // For 'public', 'dm', 'group'
             this.messageListView.update(activeThoughtId);
-            if (thought.type === 'public' && !identity.sk) {
-                 this.inputForm.show(false); // Hide input form for public view if not logged in
-            } else if (thought.type === 'public' && identity.sk) {
-                this.inputForm.show(true); // Show for public if logged in.
-            }
         }
     }
 
