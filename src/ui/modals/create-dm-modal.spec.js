@@ -1,6 +1,6 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {CreateDmModal} from './create-dm-modal.js';
-import {Component} from '/ui/ui.js';
+import {Component} from '@/ui.js';
 
 const mockApp = {
     ui: {

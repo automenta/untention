@@ -5,7 +5,7 @@ import {
     NoteEditorView,
     NoThoughtSelectedView,
     ThoughtList
-} from '/components.js';
+} from '@/components.js';
 
 export class AppUIInitializer {
     constructor(app, uiController) {

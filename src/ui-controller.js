@@ -39,15 +39,30 @@ export class UIController {
     }
 
     showModal({title, body, buttons, onMounted}) {
-        const modalContent = this.modal.element.querySelector('.modal-content');
+        const modalContent = this.modal.querySelector('.modal-content'); // Use instance method
+        if (!modalContent) {
+             console.error("UIController: modal.querySelector('.modal-content') returned null!");
+             return;
+        }
         modalContent.innerHTML = '';
 
         const titleElement = new Component('h3', {textContent: title}).element;
-        const bodyElement = body.element;
+        const bodyToAppend = body.element || body; // Handle native DOM element or Component instance
         const buttonsContainer = new Component('div', {className: 'modal-buttons'});
-        buttons.forEach(button => buttonsContainer.add(button));
 
-        modalContent.append(titleElement, bodyElement, buttonsContainer.element);
+        if (buttons && buttons.length > 0) {
+            buttons.forEach(button => buttonsContainer.add(button));
+        } else {
+            // Add a default "Okay" or "Close" button if none are provided
+            const defaultButton = new Component('button', { // Using Component directly as Button mock is for tests
+                textContent: 'Okay',
+                className: 'modal-close-button secondary' // Added secondary for styling
+            });
+            defaultButton.element.addEventListener('click', () => this.hideModal());
+            buttonsContainer.add(defaultButton);
+        }
+
+        modalContent.append(titleElement, bodyToAppend, buttonsContainer.element);
         this.modal.element.classList.add('visible');
 
         if (onMounted && typeof onMounted === 'function') {
@@ -86,13 +101,20 @@ export class UIController {
                 this.loadingIndicator = new Component('div', {
                     id: 'loading-indicator',
                     textContent: `${LOADING_EMOJI} Loading...`
+                    // Consider adding a specific class for styling if needed, e.g., 'loading-overlay'
                 });
+                // Mount should happen only once when created, or if it was explicitly unmounted
                 this.loadingIndicator.mount(document.body);
             }
             this.loadingIndicator.show(true);
+            // Ensure it's mounted if it was somehow unmounted (though destroy should handle removal)
+            // However, typically mount is only called once. If show(true) also re-appends, this might be redundant.
+            // For now, assuming show() doesn't re-mount and it was mounted on creation.
         } else {
             if (this.loadingIndicator) {
-                this.loadingIndicator.show(false);
+                this.loadingIndicator.show(false); // Ensure it's hidden before destroying
+                this.loadingIndicator.destroy();   // Use component's destroy method
+                this.loadingIndicator = null;      // Release the reference
             }
         }
     }

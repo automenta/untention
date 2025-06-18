@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import { MessageListView } from '../../src/components.js';
 import * as UiUtils from '../../src/utils/ui-utils.js';
 import * as TimeUtils from '../../src/utils/time-utils.js';
+import { MESSAGE_DISPLAY_LIMIT } from '../../src/constants.js';
 
 // Mock requestAnimationFrame
 global.requestAnimationFrame = vi.fn((cb) => { cb(); return 1; }); // Execute callback immediately
@@ -112,7 +113,8 @@ describe('MessageListView', () => {
 
     it('should respect DISPLAY_MESSAGE_LIMIT', () => {
         const initialMessages = [];
-        for (let i = 0; i < view.DISPLAY_MESSAGE_LIMIT + 10; i++) {
+        // Use the imported MESSAGE_DISPLAY_LIMIT for loop condition
+        for (let i = 0; i < MESSAGE_DISPLAY_LIMIT + 10; i++) {
             initialMessages.push({ id: `msg${i}`, content: `Message ${i}`, pubkey: 'user2', created_at: 1678886400 + i });
         }
         mockDataStore.state.messages[activeThoughtId] = initialMessages;
@@ -120,10 +122,11 @@ describe('MessageListView', () => {
         view.update(activeThoughtId);
 
         const messageElements = view.messagesContainer.element.querySelectorAll('.message:not(.system)');
-        expect(messageElements.length).toBe(view.DISPLAY_MESSAGE_LIMIT);
+        expect(messageElements.length).toBe(MESSAGE_DISPLAY_LIMIT); // Use imported constant
         // Check that the oldest messages were removed (e.g., msg0 to msg9 should be gone)
         expect(view.messagesContainer.element.querySelector('[data-id="msg0"]')).toBeNull();
-        expect(view.messagesContainer.element.querySelector(`[data-id="msg${view.DISPLAY_MESSAGE_LIMIT + 9}"]`)).not.toBeNull(); // Last message should be present
+        // The check for the last message should also use the imported constant
+        expect(view.messagesContainer.element.querySelector(`[data-id="msg${MESSAGE_DISPLAY_LIMIT + 9}"]`)).not.toBeNull();
     });
 
     it('should clear renderedMessageIds and messageRenderQueue when switching thoughts', () => {

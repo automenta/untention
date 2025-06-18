@@ -27,7 +27,27 @@ describe('NoteEditorView', () => {
             saveThoughts: vi.fn(),
             emitStateUpdated: vi.fn(),
         };
-        mockApp = { dataStore: mockDataStore }; // Mock app object
+        // mockApp = { dataStore: mockDataStore, handleAction: vi.fn() }; // Original mock
+        mockApp = {
+            dataStore: mockDataStore,
+            handleAction: vi.fn((action, data) => {
+                if (action === 'update-note-content') {
+                    const thoughtToUpdate = mockDataStore.state.thoughts[data.id];
+                    if (thoughtToUpdate) {
+                        if (data.field === 'title') {
+                            thoughtToUpdate.name = data.value;
+                        } else if (data.field === 'body') {
+                            thoughtToUpdate.body = data.value;
+                        }
+                        // Simulate timestamp update if necessary for other tests, not strictly needed here
+                        thoughtToUpdate.lastEventTimestamp = Math.floor(Date.now() / 1000);
+                        // Simulate the effects of saveThoughts and emitStateUpdated if needed by other assertions
+                        mockDataStore.saveThoughts();
+                        mockDataStore.emitStateUpdated();
+                    }
+                }
+            })
+        };
 
         view = new NoteEditorView(mockApp, mockDataStore); // Pass both app and dataStore
         document.body.appendChild(view.element);

@@ -1,0 +1,60 @@
+
+> untention@0.0.0 dev
+> vite
+
+
+  VITE v6.3.5  ready in 677 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+2:39:10 PM [vite] (client) warning:
+/app/src/index.js
+  12:9  warning  'DEFAULT_THOUGHT_ID' is defined but never used  no-unused-vars
+
+✖ 1 problem (0 errors, 1 warning)
+
+  Plugin: vite-plugin-eslint
+  File: /app/src/index.js
+2:39:10 PM [vite] (client) warning:
+/app/src/logger.js
+  18:9   warning  Unexpected console statement  no-console
+  34:9   warning  Unexpected console statement  no-console
+  51:13  warning  Unexpected console statement  no-console
+
+✖ 3 problems (0 errors, 3 warnings)
+
+  Plugin: vite-plugin-eslint
+  File: /app/src/logger.js
+2:39:10 PM [vite] (client) warning:
+/app/src/nostr.js
+  1:8   warning  'generateSecretKey' is assigned a value but never used  no-unused-vars
+  1:27  warning  'getPublicKey' is assigned a value but never used       no-unused-vars
+  1:56  warning  'verifyEvent' is assigned a value but never used        no-unused-vars
+  1:69  warning  'nip19' is assigned a value but never used              no-unused-vars
+  1:76  warning  'nip04' is assigned a value but never used              no-unused-vars
+
+✖ 5 problems (0 errors, 5 warnings)
+
+  Plugin: vite-plugin-eslint
+  File: /app/src/nostr.js
+2:39:10 PM [vite] (client) warning:
+/app/src/store.js
+  56:17  warning  'identityData' is assigned a value but never used         no-unused-vars
+  63:17  warning  'thoughtsData' is assigned a value but never used         no-unused-vars
+  70:17  warning  'profilesData' is assigned a value but never used         no-unused-vars
+  77:17  warning  'activeThoughtIdData' is assigned a value but never used  no-unused-vars
+  84:17  warning  'relaysData' is assigned a value but never used           no-unused-vars
+
+✖ 5 problems (0 errors, 5 warnings)
+
+  Plugin: vite-plugin-eslint
+  File: /app/src/store.js
+2:39:10 PM [vite] (client) warning:
+/app/src/components.js
+   4:21  warning  'now' is defined but never used             no-unused-vars
+  11:16  warning  'nip04' is assigned a value but never used  no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+
+  Plugin: vite-plugin-eslint
+  File: /app/src/components.js

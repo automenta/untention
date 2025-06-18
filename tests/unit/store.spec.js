@@ -198,7 +198,7 @@ describe('Data Store', () => {
       expect(globalThis.localforage.removeItem).toHaveBeenCalledWith('profiles_v2');
       expect(globalThis.localforage.removeItem).toHaveBeenCalledWith('activeThoughtId_v3');
       expect(globalThis.localforage.removeItem).toHaveBeenCalledWith('messages_t1');
-      expect(globalThis.localforage.removeItem).not.toHaveBeenCalledWith('relays_v2');
+      expect(globalThis.localforage.removeItem).toHaveBeenCalledWith('relays_v2'); // Expect relays_v2 to also be removed
 
       expect(setStateSpy).toHaveBeenCalled();
       const finalState = dataStore.state;

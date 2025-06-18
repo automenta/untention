@@ -1,5 +1,5 @@
 import {Logger} from '@/logger.js';
-import {hexToBytes} from '/utils/crypto-utils.js';
+import {hexToBytes} from '@/utils/crypto-utils.js';
 
 const { nip19, generateSecretKey } = NostrTools;
 

@@ -31,18 +31,14 @@ export const aesEncrypt = async (plainText, keyBase64) => {
 };
 
 export const aesDecrypt = async (encryptedData, keyBase64) => {
-    try {
-        const key = await importKeyFromBase64(keyBase64);
-        const [ivBase64, cipherTextBase64] = encryptedData.split(':');
-        if (!ivBase64 || !cipherTextBase64) throw new Error('Invalid encrypted data format');
-        const plainText = await crypto.subtle.decrypt({
-            name: "AES-GCM",
-            iv: base64ToUint8Array(ivBase64)
-        }, key, base64ToUint8Array(cipherTextBase64));
-        return new TextDecoder().decode(plainText);
-    } catch (err) {
-        throw err;
-    }
+    const key = await importKeyFromBase64(keyBase64);
+    const [ivBase64, cipherTextBase64] = encryptedData.split(':');
+    if (!ivBase64 || !cipherTextBase64) throw new Error('Invalid encrypted data format');
+    const plainText = await crypto.subtle.decrypt({
+        name: "AES-GCM",
+        iv: base64ToUint8Array(ivBase64)
+    }, key, base64ToUint8Array(cipherTextBase64));
+    return new TextDecoder().decode(plainText);
 };
 
 export const exportKeyAsBase64 = async key => {

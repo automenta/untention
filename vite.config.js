@@ -1,10 +1,13 @@
 import { defineConfig } from 'vite';
 import path from 'path'; // Import path module for alias resolution
-import eslintPlugin from 'vite-plugin-eslint'; // Import the ESLint plugin
+import eslintPlugin from 'vite-plugin-eslint'; // Use default import
 import { VitePWA } from 'vite-plugin-pwa'; // Import the PWA plugin
 import { visualizer } from 'rollup-plugin-visualizer'; // Import the visualizer plugin
 
 export default defineConfig({
+  // Set the project root to 'src' because index.html is in src/index.html
+  root: 'src',
+
   // Base public path when served in production.
   // Useful if your app is not served from the root of your domain (e.g., '/my-app/').
   // For GitHub Pages, this often needs to be set to your repository name, e.g., '/your-repo-name/'.
@@ -65,7 +68,7 @@ export default defineConfig({
     // Add Vite plugins here. Examples:
     // - @vitejs/plugin-react for React projects
     // - vite-plugin-pwa for Progressive Web App features
-    eslintPlugin({ // Configure ESLint plugin
+    eslintPlugin({ // Configure ESLint plugin using the default import
       cache: false, // Disable cache for simpler setup, enable for larger projects
       failOnWarning: false, // Don't fail build on warnings
       failOnError: true, // Fail build on errors

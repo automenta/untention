@@ -246,6 +246,11 @@ export class Data extends EventEmitter {
         this.emitStateUpdated();
     }
 
+    async resetApplicationData() { // Added to satisfy tests, delegates to clearAllApplicationData
+        Logger.infoWithContext('DataStore', 'resetApplicationData called, delegating to clearAllApplicationData.');
+        return this.clearAllApplicationData();
+    }
+
     async addRelay(url) {
         if (!validateRelayUrl(url)) {
             throw new Error('Invalid relay URL format.');

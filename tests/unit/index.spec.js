@@ -26,12 +26,12 @@ vi.mock('../../src/store.js', () => ({
     saveActiveThoughtId: vi.fn(() => Promise.resolve()),
     clearIdentity: vi.fn(() => Promise.resolve()),
     loadMessages: vi.fn(() => Promise.resolve()),
-    setState: vi.fn(updater => {
-      if (typeof updater === 'function') updater(mockAppState.dataStore.state);
-      else mockAppState.dataStore.state = {...mockAppState.dataStore.state, ...updater};
+    setState: vi.fn(function(updater) { // Use function to get 'this' context
+      if (typeof updater === 'function') updater(this.state); // Use this.state
+      else this.state = {...this.state, ...updater}; // Use this.state
     }),
     on: vi.fn(),
-    state: {
+    state: { // This is the initial state for the mock
       identity: { sk: null, pk: null, profile: null },
       thoughts: { public: { id: 'public', name: 'Public Feed', type: 'public', unread: 0 } },
       activeThoughtId: 'public',
@@ -78,16 +78,22 @@ let mockAppState;
 function createAppInstance() {
   const app = new App();
   vi.spyOn(app.identityService, 'logout').mockImplementation(() => Promise.resolve());
-  vi.spyOn(app.thoughtManagerService, 'selectThought').mockImplementation(() => Promise.resolve());
+  // vi.spyOn(app.thoughtManagerService, 'selectThought').mockImplementation(() => Promise.resolve()); // REMOVE THIS MOCK to test actual implementation
   vi.spyOn(app.nostrPublishService, 'sendMessage').mockImplementation(() => Promise.resolve());
-  vi.spyOn(app, 'createDmThought').mockImplementation(() => Promise.resolve());
-  vi.spyOn(app, 'createGroupThought').mockImplementation(() => Promise.resolve());
-  vi.spyOn(app, 'joinGroupThought').mockImplementation(() => Promise.resolve());
-  vi.spyOn(app, 'createNoteThought').mockImplementation(() => Promise.resolve());
+  vi.spyOn(app.thoughtCreationService, 'createDmThought').mockImplementation(() => Promise.resolve());
+  vi.spyOn(app.thoughtCreationService, 'createGroupThought').mockImplementation(() => Promise.resolve());
+  vi.spyOn(app.thoughtCreationService, 'joinGroupThought').mockImplementation(() => Promise.resolve());
+  vi.spyOn(app.thoughtCreationService, 'createNoteThought').mockImplementation(() => Promise.resolve());
   vi.spyOn(app.relayManagerService, 'addRelay').mockImplementation(() => Promise.resolve());
   vi.spyOn(app.relayManagerService, 'removeRelay').mockImplementation(() => Promise.resolve()); // This spy is important
   vi.spyOn(app.nostrPublishService, 'updateProfile').mockImplementation(() => Promise.resolve());
   vi.spyOn(app.thoughtManagerService, 'leaveThought').mockImplementation(() => Promise.resolve());
+  vi.spyOn(app.thoughtManagerService, 'updateNoteContent').mockImplementation(() => Promise.resolve());
+
+  // Explicitly spy on the setLoading method of the ui instance that will be used
+  vi.spyOn(app.ui, 'setLoading');
+  vi.spyOn(app.ui, 'showToast');
+
 
   mockAppState = { app, dataStore: app.dataStore, ui: app.ui, nostr: app.nostr, modalService: app.modalService, identityService: app.identityService, thoughtManagerService: app.thoughtManagerService, nostrPublishService: app.nostrPublishService, relayManagerService: app.relayManagerService };
   return app;
@@ -128,6 +134,8 @@ describe('App', () => {
 
     it("should call app.thoughtManagerService.selectThought with id for 'select-thought'", () => {
       const thoughtId = 'some-thought-id';
+      // Spy specifically for this test case, as other tests need the original implementation
+      vi.spyOn(app.thoughtManagerService, 'selectThought');
       app.handleAction('select-thought', thoughtId);
       expect(app.thoughtManagerService.selectThought).toHaveBeenCalledWith(thoughtId);
     });
@@ -143,7 +151,7 @@ describe('App', () => {
       const formData = { get: vi.fn(key => key === 'name' ? groupName : null) };
       app.handleAction('create-group', formData);
       expect(formData.get).toHaveBeenCalledWith('name');
-      expect(app.createGroupThought).toHaveBeenCalledWith(groupName);
+      expect(app.thoughtCreationService.createGroupThought).toHaveBeenCalledWith(groupName);
     });
 
     it("should call app.createDmThought with pubkey for 'create-dm'", () => {
@@ -151,7 +159,7 @@ describe('App', () => {
       const formData = { get: vi.fn(key => key === 'pubkey' ? pubkey : null) };
       app.handleAction('create-dm', formData);
       expect(formData.get).toHaveBeenCalledWith('pubkey');
-      expect(app.createDmThought).toHaveBeenCalledWith(pubkey);
+      expect(app.thoughtCreationService.createDmThought).toHaveBeenCalledWith(pubkey);
     });
 
     it("should call app.thoughtManagerService.leaveThought for 'leave-thought'", () => {
@@ -173,7 +181,7 @@ describe('App', () => {
       expect(formData.get).toHaveBeenCalledWith('id');
       expect(formData.get).toHaveBeenCalledWith('key');
       expect(formData.get).toHaveBeenCalledWith('name');
-      expect(app.joinGroupThought).toHaveBeenCalledWith(mockGroupJoinData.id, mockGroupJoinData.key, mockGroupJoinData.name);
+      expect(app.thoughtCreationService.joinGroupThought).toHaveBeenCalledWith(mockGroupJoinData.id, mockGroupJoinData.key, mockGroupJoinData.name);
     });
 
     it("should call app.relayManagerService.addRelay for 'add-relay'", () => {
@@ -203,7 +211,7 @@ describe('App', () => {
 
     it("should call app.createNoteThought for 'create-note'", () => {
       app.handleAction('create-note');
-      expect(app.createNoteThought).toHaveBeenCalled();
+      expect(app.thoughtCreationService.createNoteThought).toHaveBeenCalled();
     });
   });
 
@@ -235,7 +243,9 @@ describe('App', () => {
     });
 
     it('successfully selects a new thought with unread messages', async () => {
-      await app.selectThought(newThoughtId);
+      // Diagnostic lines removed
+
+      await app.thoughtManagerService.selectThought(newThoughtId);
       expect(mockAppState.ui.setLoading).toHaveBeenCalledWith(true);
       expect(mockAppState.dataStore.setState).toHaveBeenCalledWith(expect.any(Function));
       const setStateFn = mockAppState.dataStore.setState.mock.calls[0][0];
@@ -253,7 +263,7 @@ describe('App', () => {
     it('does not call save/load methods if selecting the same thought with no unread messages', async () => {
       thoughtsMock[currentThoughtId].unread = 0;
       mockAppState.dataStore._updateMockState({ activeThoughtId: currentThoughtId, thoughts: thoughtsMock });
-      await app.selectThought(currentThoughtId);
+      await app.thoughtManagerService.selectThought(currentThoughtId);
       expect(mockAppState.ui.setLoading).toHaveBeenCalledWith(true);
       expect(mockAppState.dataStore.setState).toHaveBeenCalled();
       expect(mockAppState.dataStore.saveActiveThoughtId).not.toHaveBeenCalled();
@@ -266,7 +276,7 @@ describe('App', () => {
     it('selects a new thought with unread already 0, saves activeId, loads messages, but not thoughts', async () => {
       thoughtsMock[newThoughtId].unread = 0;
       mockAppState.dataStore._updateMockState({ thoughts: thoughtsMock, activeThoughtId: currentThoughtId });
-      await app.selectThought(newThoughtId);
+      await app.thoughtManagerService.selectThought(newThoughtId);
       expect(mockAppState.ui.setLoading).toHaveBeenCalledWith(true);
       expect(mockAppState.dataStore.setState).toHaveBeenCalled();
       const setStateFn = mockAppState.dataStore.setState.mock.calls[0][0];
@@ -281,7 +291,7 @@ describe('App', () => {
 
     it('selects "public" thought if an invalid thought ID is provided', async () => {
       const invalidThoughtId = 'nonExistentId';
-      await app.selectThought(invalidThoughtId);
+      await app.thoughtManagerService.selectThought(invalidThoughtId);
       expect(mockAppState.ui.setLoading).toHaveBeenCalledWith(true);
       expect(mockAppState.dataStore.setState).toHaveBeenCalled();
       const setStateFn = mockAppState.dataStore.setState.mock.calls[0][0];
@@ -298,19 +308,19 @@ describe('App', () => {
       const error = new Error('Test Error');
       it('handles error from loadMessages', async () => {
         mockAppState.dataStore.loadMessages.mockRejectedValueOnce(error);
-        await app.selectThought(newThoughtId);
+        await app.thoughtManagerService.selectThought(newThoughtId);
         expect(mockAppState.ui.showToast).toHaveBeenCalledWith(expect.stringContaining('Failed to load thought: Test Error'), 'error');
         expect(mockAppState.ui.setLoading).toHaveBeenLastCalledWith(false);
       });
       it('handles error from fetchHistoricalMessages', async () => {
         mockAppState.nostr.fetchHistoricalMessages.mockRejectedValueOnce(error);
-        await app.selectThought(newThoughtId);
+        await app.thoughtManagerService.selectThought(newThoughtId);
         expect(mockAppState.ui.showToast).toHaveBeenCalledWith(expect.stringContaining('Failed to load thought: Test Error'), 'error');
         expect(mockAppState.ui.setLoading).toHaveBeenLastCalledWith(false);
       });
       it('handles error from saveActiveThoughtId', async () => {
         mockAppState.dataStore.saveActiveThoughtId.mockRejectedValueOnce(error);
-        await app.selectThought(newThoughtId);
+        await app.thoughtManagerService.selectThought(newThoughtId);
         expect(mockAppState.ui.showToast).toHaveBeenCalledWith(expect.stringContaining('Failed to load thought: Test Error'), 'error');
         expect(mockAppState.ui.setLoading).toHaveBeenLastCalledWith(false);
       });
@@ -318,7 +328,7 @@ describe('App', () => {
         thoughtsMock[newThoughtId].unread = 1;
         mockAppState.dataStore._updateMockState({ thoughts: thoughtsMock });
         mockAppState.dataStore.saveThoughts.mockRejectedValueOnce(error);
-        await app.selectThought(newThoughtId);
+        await app.thoughtManagerService.selectThought(newThoughtId);
         expect(mockAppState.ui.showToast).toHaveBeenCalledWith(expect.stringContaining('Failed to load thought: Test Error'), 'error');
         expect(mockAppState.ui.setLoading).toHaveBeenLastCalledWith(false);
       });

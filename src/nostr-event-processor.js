@@ -1,7 +1,7 @@
 import {Logger} from '@/logger.js';
-import {aesDecrypt} from '/utils/crypto-utils.js';
-import {findTag, shortenPubkey} from '/utils/nostr-utils.js';
-import {now} from '/utils/time-utils.js';
+import {aesDecrypt} from '@/utils/crypto-utils.js';
+import {findTag, shortenPubkey} from '@/utils/nostr-utils.js';
+import {now} from '@/utils/time-utils.js';
 import {
     DEFAULT_THOUGHT_ID,
     ENCRYPTED_DM_KIND,
@@ -36,11 +36,11 @@ export class NostrEventProcessor {
 
         try {
             switch (event.kind) {
-                case PROFILE_KIND:
+                case PROFILE_KIND: {
                     await this.processKind0(event);
                     return;
-
-                case TEXT_NOTE_KIND:
+                }
+                case TEXT_NOTE_KIND: {
                     if (subId === DEFAULT_THOUGHT_ID || (subId && subId.startsWith('historical-public'))) {
                         thoughtId = DEFAULT_THOUGHT_ID;
                     } else if (subId && subId.startsWith('thought-')) {
@@ -50,8 +50,8 @@ export class NostrEventProcessor {
                         return;
                     }
                     break;
-
-                case ENCRYPTED_DM_KIND:
+                }
+                case ENCRYPTED_DM_KIND: {
                     const otherPubkey = event.pubkey === this.dataStore.state.identity.pk ? findTag(event, 'p') : event.pubkey;
                     if (!otherPubkey) {
                         Logger.warnWithContext('NostrEventProcessor', 'DM event without a peer pubkey.', event);
@@ -83,8 +83,8 @@ export class NostrEventProcessor {
                         this.nostrInstance.fetchProfile(thoughtId);
                     }
                     break;
-
-                case GROUP_CHAT_KIND:
+                }
+                case GROUP_CHAT_KIND: {
                     const groupTag = findTag(event, 'g');
                     if (!groupTag) {
                         Logger.warnWithContext('NostrEventProcessor', 'Group chat event without a group ID.', event);
@@ -103,10 +103,11 @@ export class NostrEventProcessor {
                         cleartextMessageContent = "[Could not decrypt message]";
                     }
                     break;
-
-                default:
+                }
+                default: {
                     Logger.logWithContext('NostrEventProcessor', `Received event of kind ${event.kind}, not processed by this handler:`, event);
                     return;
+                }
             }
 
             if (thoughtId && cleartextMessageContent !== undefined) {

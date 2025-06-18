@@ -1,20 +1,20 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {ModalService} from '/modal-service.js';
-import {IdentityModal} from '/ui/modals/identity-modal.js';
-import {ProfileModal} from '/ui/modals/profile-modal.js';
-import {CreateGroupModal} from '/ui/modals/create-group-modal.js';
-import {JoinGroupModal} from '/ui/modals/join-group-modal.js';
-import {CreateDmModal} from '/ui/modals/create-dm-modal.js';
-import {GroupInfoModal} from '/ui/modals/group-info-modal.js';
-import {RelaysModal} from '/ui/modals/relays-modal.js';
+import {ModalService} from '@/modal-service.js';
+import {IdentityModal} from '@/ui/modals/identity-modal.js';
+import {ProfileModal} from '@/ui/modals/profile-modal.js';
+import {CreateGroupModal} from '@/ui/modals/create-group-modal.js';
+import {JoinGroupModal} from '@/ui/modals/join-group-modal.js';
+import {CreateDmModal} from '@/ui/modals/create-dm-modal.js';
+import {GroupInfoModal} from '@/ui/modals/group-info-modal.js';
+import {RelaysModal} from '@/ui/modals/relays-modal.js';
 
-vi.mock('/ui/modals/identity-modal.js', () => ({ IdentityModal: vi.fn() }));
-vi.mock('/ui/modals/profile-modal.js', () => ({ ProfileModal: vi.fn() }));
-vi.mock('/ui/modals/create-group-modal.js', () => ({ CreateGroupModal: vi.fn() }));
-vi.mock('/ui/modals/join-group-modal.js', () => ({ JoinGroupModal: vi.fn() }));
-vi.mock('/ui/modals/create-dm-modal.js', () => ({ CreateDmModal: vi.fn() }));
-vi.mock('/ui/modals/group-info-modal.js', () => ({ GroupInfoModal: vi.fn() }));
-vi.mock('/ui/modals/relays-modal.js', () => ({ RelaysModal: vi.fn() }));
+vi.mock('@/ui/modals/identity-modal.js', () => ({ IdentityModal: vi.fn() }));
+vi.mock('@/ui/modals/profile-modal.js', () => ({ ProfileModal: vi.fn() }));
+vi.mock('@/ui/modals/create-group-modal.js', () => ({ CreateGroupModal: vi.fn() }));
+vi.mock('@/ui/modals/join-group-modal.js', () => ({ JoinGroupModal: vi.fn() }));
+vi.mock('@/ui/modals/create-dm-modal.js', () => ({ CreateDmModal: vi.fn() }));
+vi.mock('@/ui/modals/group-info-modal.js', () => ({ GroupInfoModal: vi.fn() }));
+vi.mock('@/ui/modals/relays-modal.js', () => ({ RelaysModal: vi.fn() }));
 
 
 const mockApp = {

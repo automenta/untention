@@ -1,6 +1,6 @@
 import {Logger} from '@/logger.js';
-import {now} from '/utils/time-utils.js';
-import {aesEncrypt} from '/utils/crypto-utils.js';
+import {now} from '@/utils/time-utils.js';
+import {aesEncrypt} from '@/utils/crypto-utils.js';
 import {
     DEFAULT_THOUGHT_ID,
     ENCRYPTED_DM_KIND,

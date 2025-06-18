@@ -1,13 +1,11 @@
 import DOMPurify from 'dompurify';
-import {Button, Component} from '/ui/ui.js';
-import {createAvatarSvg, escapeHtml, getUserColor} from '/utils/ui-utils.js';
-import {formatTime, now} from '/utils/time-utils.js';
-import {shortenPubkey} from '/utils/nostr-utils.js';
+import {Button, Component} from '@/ui.js';
+import {createAvatarSvg, escapeHtml, getUserColor} from '@/utils/ui-utils.js';
+import {formatTime, now} from '@/utils/time-utils.js';
+import {shortenPubkey} from '@/utils/nostr-utils.js';
 import {
     DEFAULT_THOUGHT_ID,
-    MESSAGE_DISPLAY_LIMIT,
-    MESSAGE_ID_MAX_SIZE,
-    MESSAGE_ID_TRIM_THRESHOLD
+    MESSAGE_DISPLAY_LIMIT
 } from '@/constants.js';
 
 const { nip19, nip04 } = NostrTools;
@@ -244,8 +242,11 @@ class MessageListView extends Component {
             oldestChild.remove();
         }
 
-        if (this.renderedMessageIds.size > MESSAGE_ID_MAX_SIZE) {
-            this.renderedMessageIds = new Set(Array.from(this.renderedMessageIds).slice(-MESSAGE_ID_TRIM_THRESHOLD));
+        // Assuming MESSAGE_DISPLAY_LIMIT can be used here as a sensible default for trimming.
+        // If specific different logic is needed for MESSAGE_ID_MAX_SIZE and MESSAGE_ID_TRIM_THRESHOLD,
+        // those constants would need to be added to constants.js
+        if (this.renderedMessageIds.size > MESSAGE_DISPLAY_LIMIT * 2) { // Example: Keep up to 2x display limit
+            this.renderedMessageIds = new Set(Array.from(this.renderedMessageIds).slice(-MESSAGE_DISPLAY_LIMIT)); // Trim to display limit
         }
 
         if (msgsToRender.length > 0 && isScrolledToBottom) {
@@ -411,8 +412,10 @@ export class MainView extends Component {
         this.inputForm.show(showInput);
 
         if (thought.type === 'note') {
+            this.noteEditorView.show(true); // Explicitly show
             this.noteEditorView.update(thought);
         } else {
+            this.messageListView.show(true); // Explicitly show
             this.messageListView.update(activeThoughtId);
         }
     }
@@ -456,4 +459,4 @@ export class MainView extends Component {
     }
 }
 
-export { IdentityPanel, ThoughtList, MainView, NoThoughtSelectedView, NoteEditorView, MessageListView };
+export { NoThoughtSelectedView, NoteEditorView, MessageListView };

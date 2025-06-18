@@ -1,6 +1,6 @@
 import {Logger} from '@/logger.js';
 import localforage from 'localforage';
-import {now} from '/utils/time-utils.js';
+import {now} from '@/utils/time-utils.js';
 
 const DEFAULT_THOUGHT_ID = 'public';
 

@@ -1,6 +1,6 @@
 import Quill from 'quill';
 import {BaseModal} from './modal.js';
-import {Button, Component} from '/ui/ui.js';
+import {Button, Component} from '@/ui.js';
 import {Logger} from '@/logger.js';
 
 export class CreateDmModal extends BaseModal {
