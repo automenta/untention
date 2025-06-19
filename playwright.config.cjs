@@ -20,7 +20,7 @@ module.exports = defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run start',
+    command: 'npm run dev',
     url: 'http://localhost:3000/index.html', // Serving ./src, so index.html is at the root of the server
     reuseExistingServer: !process.env.CI,
     cwd: '.', // npm run start should be executed from the root
