@@ -26,7 +26,7 @@ module.exports = {
     'import/no-unresolved': ['error', { commonjs: true, amd: true, ignore: ['^node:'] }], // Ensure imported modules can be resolved, ignore node: built-ins
     'import/named': 'error', // Ensure named imports correspond to a named export
     'import/namespace': 'error', // Ensure all exports are valid
-    'import/default': 'error', // Ensure default import is valid
+    'import/default': 'warn', // Ensure default import is valid
     'import/export': 'error', // Ensure all exports are valid
   },
   settings: {

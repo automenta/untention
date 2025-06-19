@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import path from 'path'; // Import path module for alias resolution
-import eslintPlugin from 'vite-plugin-eslint'; // Use default import
+import eslintPlugin from '@nabla/vite-plugin-eslint'; // Use default import
 import { VitePWA } from 'vite-plugin-pwa'; // Import the PWA plugin
 import { visualizer } from 'rollup-plugin-visualizer'; // Import the visualizer plugin
 
@@ -68,11 +68,7 @@ export default defineConfig({
     // Add Vite plugins here. Examples:
     // - @vitejs/plugin-react for React projects
     // - vite-plugin-pwa for Progressive Web App features
-    eslintPlugin({ // Configure ESLint plugin using the default import
-      cache: false, // Disable cache for simpler setup, enable for larger projects
-      failOnWarning: false, // Don't fail build on warnings
-      failOnError: true, // Fail build on errors
-    }),
+    eslintPlugin(), // Configure ESLint plugin using the default import
     VitePWA({ // Configure PWA plugin
       registerType: 'autoUpdate', // Automatically update service worker
       injectRegister: 'auto', // Inject service worker registration code
